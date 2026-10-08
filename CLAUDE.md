@@ -23,7 +23,9 @@ Alt som er lært om arkitektur, hver modul, tekniske fallgruver, designbeslutnin
 `Prosjektfiler\` er stedet for alt arbeid som ikke er selve HTML-siden eller EMI-kildekoden:
 - `Testfiler\` — VARIGE, gjenbrukbare test-arbeidsbøker. **Ikke lag en fersk kastefil per testrunde og slett den etterpå** — det er tungvint og en forlatt praksis. Ha noen få faste testfiler (gjerne flere, for ulike scenarioer) som gjenbrukes og «testes i alle kanter» over tid, akkurat som en ekte arbeidsbok.
 - `Ikke-utgitte makroer\` — kildekode for moduler under utvikling, ikke lagt inn i `Excel Macro Installer\Macros\` ennå.
-- `_overlevering\` — frossen historikk fra de opprinnelige enkelt-makro-sesjonene. Oppslagsverk ved behov for ekstra detalj, ikke rutinemessig lesing.
+- `_overlevering\` — frossen historikk fra de opprinnelige enkelt-makro-sesjonene. Oppslagsverk ved behov for ekstra detalj, ikke rutinemessig lesing. **Kun i OneDrive** (ikke i det offentlige repoet).
+- `_publisering\` — `Publiser-EMI.ps1`, som publiserer en ny EMI-pakkeversjon til brukerne.
+- `Kontoflytting\` — plan/logg for flyttingen til jobbkontoen timssbooking@gmail.com (GitHub `timmytimss`, egen Cloudflare-konto). **Kun i OneDrive.**
 - `_bygg\` — `SPEC.md` + fragmentene HTML-siden kan bygges fra ved store ombygginger (se over).
 - `_beredskap\` — beredskapsplan (`GJENOPPRETTING.md`) for å gjenopprette Kjetil/Nils på en ny PC hvis denne går tapt, pluss løpende sikkerhetskopi av minnefilene deres (`minne-backup\`). Les `GJENOPPRETTING.md` hvis du er en helt ny session satt opp etter et PC-bytte.
 
@@ -61,6 +63,9 @@ Selve `git commit`/`push` koster ingen Claude-«usage» — det er ren filoperas
 - **Kjetil oppdager rutinemessige endringer selv** ved å kjøre `git log`/`git diff` mot `main` fra sin egen arbeidskopie (`Documents\excelVBAkoding-git\`) når han uansett synker — jevnlig, eller når Håkon sier «Saml troppene». Git-historikken ER loggen for rutinekode; `KOORDINERING.md` er reservert for det som faktisk trenger kryss-session-koordinering.
 
 ## Absolutte regler (aldri overstyres av noe annet)
+
+- **GitHub-repoet `timmytimss/excelVBAkoding` er OFFENTLIG (fra 2026-10-08).** Alt som committes kan leses av hvem som helst. Aldri commit personopplysninger (andres e-postadresser, stier til Håkons ekte arbeidsbøker, `installed-files.json`/`known-files.json`), minnefiler, hemmeligheter eller ekte data. `Prosjektfiler\_overlevering\`, `Prosjektfiler\_beredskap\minne-backup\`, `Prosjektfiler\Kontoflytting\` og `*.bundle` ligger KUN i OneDrive (gitignored) — ikke kopier dem inn i git-klonene. Klonene (`Documents\excelVBAkoding-git\`, `-git-nils\`) pusher som `timmytimss` og committer som `timmytimss <timmytimss@users.noreply.github.com>`. Historikken før 2026-10-08 ligger privat som `Prosjektfiler\_beredskap\git-historikk-for-offentlig-2026-10-08.bundle`.
+- **EMI-installasjon vs. kilde:** Håkons EMI kjører nå fra `%LOCALAPPDATA%\Programs\Excel Macro Installer` og oppdaterer seg selv fra GitHub. OneDrive-mappa `Excel Macro Installer\` er KUN kildekode. Ny versjon ut til brukere = commit/push i klonen + `Prosjektfiler\_publisering\Publiser-EMI.ps1 -Endringer "…"`. Detaljer: HTML-sidens `#mac-emi-selvoppdatering`.
 
 - **Personvern:** les aldri innhold fra Håkons ekte, levende Excel-filer eller Outlook-postboks — ikke engang «bare struktur». Gjelder transitivt for enhver subagent. Test alltid mot en av de varige testfilene i `Prosjektfiler\Testfiler\`, aldri mot en ekte arbeidsbok. Se HTML-sidens «Hvordan Håkon liker å jobbe»-seksjon for full detalj.
 - **Delegering/subagenter:** spør Håkon FØRST hver gang før du setter i gang parallelle subagenter — ikke bruk det som stilltiende standardmetode, selv om han liker resultatet når det brukes riktig.
