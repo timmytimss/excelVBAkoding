@@ -1,0 +1,59 @@
+<div class="technique" id="t-makromeny-ikke-berore">
+  <h4>Grunnregel: aldri åpne, les eller rør Håkons ekte filer</h4>
+  <p>Ikke åpne Hovedarbeidsboken, Testfil eller andre av Håkons levende filer (Håkon: «Du skal ikke gjøre noe med Hovedarbeidsboken!»). Alle tester skjer i egne kastefiler. Hvis Håkon selv åpner Makromeny i sin egen fil under testing, vent på ham («Jeg lukker nå») og be om lov før du gjør noe mer.</p>
+</div>
+
+<div class="technique" id="t-makromeny-kastefiler">
+  <h4>Kastefiler med unike navn</h4>
+  <p>Lag egne testarbeidsbøker med unike navn (f.eks. <code>MakromenyCrashTest2_&lt;tilfeldig&gt;.xlsm</code>) i <code>%TEMP%</code>, via Excel COM: <code>Workbooks.Add</code> -&gt; <code>SaveAs</code> som xlsm (filformat 52). Installer med <code>powershell -File Makromeny.ps1 -Path &lt;fil&gt;</code>; test også <code>-Uninstall</code>; verifiser persistens ved å lukke boka, åpne den på nytt og sjekke at komponentene finnes (eller er borte). Test alltid nytt/endret VBA her først, fordi en «Compile error»-dialog ellers vises på Håkons skjerm og en kompileringsfeil i én modul blokkerer alle makroer i boka (<a href="#g-kompilering-kastefil">kompileringsfeil</a>). Unike navn er viktig fordi alle bøker deler én Excel-instans.</p>
+</div>
+
+<div class="technique" id="t-makromeny-installer-flere-boker">
+  <h4>Test OnAction-fiksen med flere åpne bøker</h4>
+  <p>For å verifisere kvalifisert OnAction (<a href="#g-crossworkbook-onaction">cross-workbook OnAction</a>): åpne flere kastefiler i samme Excel-prosess, installer i én av dem (den er ikke nødvendigvis aktiv), og kontroller at knappens <code>OnAction</code> peker på <code>'&lt;riktig bok&gt;'!Makronavn</code>. Gjenta med hver av de andre installerne (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter).</p>
+</div>
+
+<div class="technique" id="t-makromeny-delt-excel">
+  <h4>Koble til delt Excel-instans og kall makroer kvalifisert</h4>
+  <p>Bruk <code>[Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")</code> og finn boka på <code>FullName</code>. Kall makroer kvalifisert: <code>$excel.Run("'Fil.xlsm'!SettArkKnappPaa")</code> (ukvalifisert feiler, se <a href="#g-delt-excel-application-run">Application.Run</a>). Enumerering via Running Object Table (late-bound COM) feilet, <code>Find-MyExcel.ps1</code> er beholdt som «ikke anbefalt» (<a href="#g-rot-enumerering">ROT</a>). Frigjør COM-objekter med <code>ReleaseComObject</code> også ved feil.</p>
+</div>
+
+<div class="technique" id="t-makromeny-modal-skjema">
+  <h4>Modale UserForm-tester: EnumWindows, PrintWindow, PostMessage WM_CLOSE</h4>
+  <p>Et modalt skjema blokkerer kallet som viser det. Fremgangsmåte: (1) kjør triggeren (f.eks. <code>Run "'Fil.xlsm'!VisMakroMeny"</code>) i bakgrunnen med timeout; (2) finn vinduet med <code>EnumWindows</code>: vindusklasse <code>ThunderDFrame</code> og caption «Makromeny» (filtrer på Excel-prosessens PID); (3) ta bilde med <code>PrintWindow(hwnd)</code>; (4) lukk med <code>PostMessage(hwnd, 0x0010, 0, 0)</code> (0x0010 = WM_CLOSE). Hvis noe «henger», enumerer også vinduer per PID og let etter en skjult feildialog (<code>#32770</code>) bak skjemaet (<a href="#g-skjult-feildialog-modal">skjult feildialog</a>). Type-definisjoner med <code>Add-Type</code> må ligge i samme script som bruker dem (ingen tilstand mellom verktøykall).</p>
+</div>
+
+<div class="technique" id="t-makromeny-printwindow">
+  <h4>Skjermbilder med PrintWindow, ikke koordinater</h4>
+  <p>Bruk <code>PrintWindow(hwnd)</code> mot testvinduet. Koordinatbaserte skjermbilder kan fange andre vinduer på Håkons skjerm (et nesten-uhell fanget sidepanelet hans; bildet ble slettet umiddelbart).</p>
+</div>
+
+<div class="technique" id="t-makromeny-krasjsimulering">
+  <h4>Simulere et krasj-scenario med en midlertidig testmodul</h4>
+  <p>For krasjfiksen i v2.2.1 ble scenarioet gjenskapt i en kastefil: legg til testmodul <code>modTest</code> (<code>VBComponents.Add(1)</code>, fjernes etterpå) med <code>SimulerKrasjScenario</code>: (1) aktiver arket «SlettesSnart», (2) slett det (<code>DisplayAlerts = False</code>), (3) aktiver «Makromeny»-fanen. Den modale menyen som åpnes lukkes med WM_CLOSE (se modal-teknikken). Ved suksess skriver testen «INGEN_KRASJ_OK» i A1, og aktivt ark er første ark. Driver: <code>Run-CrashTest.ps1</code>. Lærdom: gjenskap krasjscenarioet mekanisk (slett objektet som referansen peker på) i stedet for å vente på at det oppstår.</p>
+</div>
+
+<div class="technique" id="t-makromeny-ikonverifisering">
+  <h4>Ikonverifisering: last lagret .ico på nytt og rendre ekte</h4>
+  <p>Last den <em>lagrede</em> .ico-fila på nytt med <code>New-Object System.Drawing.Icon</code>, sjekk <code>Width</code>/<code>Height</code> og rendre den i en ekte WinForms <code>PictureBox</code> (<code>Verify-RealRender.ps1</code>). Ikke lagre PNG fra in-memory-bitmap: den ser fin ut selv om ikonet er korrupt (256x256 via <code>GetHicon</code> ble korrupt, se <a href="#g-gethicon-256-korrupt">GetHicon</a>). For lesbarhet i liten størrelse: <code>Preview-Small.ps1</code> lager forhåndsvisning på ca. 40 px, også forstørret 3x.</p>
+</div>
+
+<div class="technique" id="t-makromeny-byteskanning">
+  <h4>Sjekk koding med byteskanning</h4>
+  <p>Kontroller at .ps1-filer har riktig BOM-status og ingen uventede rå æøå: skann bytene etter <code>EF BB BF</code> (UTF-8 BOM) og <code>0xC3</code> (start på UTF-8-kodet æøå). Makromeny.ps1 har ingen BOM og null rå æøå; de fire andre installerne har BOM (<a href="#g-utf8-bom-aeoeaa">UTF-8 uten BOM</a>).</p>
+</div>
+
+<div class="technique" id="t-makromeny-delvis-verifisering">
+  <h4>Del opp det som ikke kan klikkes automatisk</h4>
+  <p>UserForm-kontroller vises ikke i UI Automation, så ekte museklikk på en dynamisk flis kan ikke scriptes (<a href="#g-uia-userform">UIA og UserForm</a>). Verifiser delene hver for seg: (a) at menyen bygges (riktige fliser ut fra installerte komponenter), (b) at <code>Unload</code> skjer før <code>Run</code>, (c) at selve <code>Run</code> starter riktig makro. Rapporter ærlig at ekte klikk-test gjenstår for Håkon.</p>
+</div>
+
+<div class="technique" id="t-makromeny-rydding">
+  <h4>Rydding etter testing</h4>
+  <p>Drep <strong>bare</strong> egne <code>EXCEL.EXE</code> etter å ha bekreftet PID/vindustittel; lukk egen testbok med <code>Close($false)</code>; slett kastefila; aldri <code>Quit</code> på den delte Excel-instansen (<a href="#g-delt-excel-instans-opprydding">delt instans</a>).</p>
+</div>
+
+<div class="technique" id="t-makromeny-hjelpescripts">
+  <h4>Gjenbrukbare hjelpescripts (Windows PowerShell 5.1)</h4>
+  <p>Fra Makromeny-utviklingen, kopiert til <code>_overlevering\Makromeny\hjelpescripts\</code> (juster stier som peker til gammel scratchpad og til <code>EMI\Resources</code>): <code>Convert-UserIcons.ps1</code> (PNG -&gt; avrundet gradient-badge -&gt; 128x128 .ico), <code>Make-Base64.ps1</code> (.ico -&gt; 40x40 BMP -&gt; base64 i 200-tegns VBA-biter), <code>Verify-RealRender.ps1</code>, <code>Preview-Small.ps1</code>, <code>part1.txt</code>/<code>part2.txt</code> (VBA og installer-kode delt opp; bruk <code>EMI\Macros\Makromeny.ps1</code> som kilde). Ikke kopiert: <code>Run-CrashTest.ps1</code>, <code>Find-MyExcel.ps1</code> (ROT, ikke anbefalt), <code>Generate-Icons.ps1</code> (forkastede design). Alle kjøres med <code>powershell.exe</code> (5.1), ikke PowerShell 7.</p>
+</div>

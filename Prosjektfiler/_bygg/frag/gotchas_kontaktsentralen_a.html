@@ -1,0 +1,173 @@
+<div class="gotcha" id="g-byval-array" data-cat="vba">
+  <h4>ByVal på array-parameter registrerer ikke funksjonen</h4>
+  <dl><dt>Symptom</dt><dd>«Sub or Function not defined» på kallstedet, selv om funksjonen finnes og teksten leses fint tilbake via <code>CodeModule.Lines</code>.</dd><dt>Årsak</dt><dd><code>ByVal arr() As String</code> er ugyldig VBA (array-parametere kan bare være ByRef); VBA registrerer da ikke prosedyren som gyldig kallbar. Fanges ikke av at en ANNEN prosedyre i samme modul kjører fint via <code>Application.Run</code> — VBA kompilerer per kallgraf, ikke hele prosjektet eagert ved hvert kall.</dd><dt>Løsning</dt><dd>Fjern <code>ByVal</code> foran array-parametere. Rammet <code>FinnMatchendeRad</code>/<code>ErTom</code> (v0.3.2); Håkon fant den ved å klikke «Skann nå» selv.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-redim-negativ" data-cat="vba">
+  <h4>ReDim med Upper &lt; Lower er alltid ugyldig</h4>
+  <dl><dt>Symptom</dt><dd>Kjøretidsfeil 9 «Subscript out of range» på <code>ReDim x(0 To -1)</code> eller lignende.</dd><dt>Årsak</dt><dd>Det er en myte at dette lager et tomt array — ENHVER <code>ReDim</code> der øvre grense er mindre enn nedre feiler ubetinget (bekreftet også for <code>ReDim x(1 To 0)</code>). Rammet 4 steder i v0.3.x-koden. Kompileringssjekk fanger ikke dette (det er en kjøretidsfeil).</dd><dt>Løsning</dt><dd>La arrayet stå uallokert (aldri <code>ReDim</code>'t) eller <code>Erase</code> det. Test tomhet med <code>On Error Resume Next: n = -1: n = UBound(arr): On Error GoTo 0: tom = (n &lt; 0)</code> — både <code>UBound</code> og <code>LBound</code> feiler på et uallokert array.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-dict-objektverdi" data-cat="vba">
+  <h4>Objekt som verdi i late-bound Scripting.Dictionary</h4>
+  <dl><dt>Symptom</dt><dd><code>dict(key) = obj</code> eller <code>Set dict(key) = obj</code> feiler med kjøretidsfeil 450 («Wrong number of arguments...») eller en <code>On Error</code>-ufangbar <code>Exception from HRESULT: 0x800A9C68</code>.</dd><dt>Årsak</dt><dd>Skjer når BÅDE dictionary og verdien er late-bound (<code>As Object</code> + <code>CreateObject</code>) OG verdiens egen type også har et parametrisert standardmedlem (f.eks. en annen Dictionary eller Collection). VBAs sen-bundne property-put-dispatch prøver å løse høyresiden gjennom SITT EGET standardmedlem i stedet for å lagre referansen direkte. Var til stede 5 steder i v0.7.0-cachekoden og er trolig hovedårsaken til «0 kategoriserte rader» i 0.6.2-notatet (ikke bare komma-splitt-feilen).</dd><dt>Løsning</dt><dd>Bruk <code>dict.Add key, obj</code> for ny nøkkel, eller <code>If dict.Exists(key) Then dict.Remove key: dict.Add key, obj</code> for upsert. Å LESE <code>Set x = dict(key)</code> er OK; bare skrive-siden er ødelagt. Korollar: ikke gjenbruk samme late-bound objekt to ganger i samme setning (f.eks. <code>dict.Add d("EntryID"), d</code>) — trekk nøkkelen ut i egen variabel først (<code>k = d("EntryID"): dict.Add k, d</code>).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-enlinjes-if" data-cat="vba">
+  <h4>ElseIf og : End Sub er ikke lovlig i enlinjes If</h4>
+  <dl><dt>Symptom</dt><dd>Kompileringsfeil som først dukker opp når prosedyren faktisk nås (rammet dashbordets «Gå til celle» og radsidens «Åpne i Outlook» i 0.7.x).</dd><dt>Årsak</dt><dd><code>ElseIf</code> er ikke tillatt i en enlinjes <code>If</code>, og heller ikke <code>: End Sub</code> etter en enlinjes <code>If</code>.</dd><dt>Løsning</dt><dd>Lovlig: <code>If x Then a: b: c</code>, <code>... Then y Else z</code>, <code>... Then a: Exit For</code>/<code>Exit Function</code>. Bruk full <code>If...Then...ElseIf...End If</code>-blokk når mer enn én gren trengs, og aldri <code>: End Sub</code> i en enlinjes If.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-const-midt-i-modul" data-cat="vba">
+  <h4>Const/Dim midt i modul etter kommentarblokk</h4>
+  <dl><dt>Symptom</dt><dd>Kompileringsfeil «Only comments may appear after End Sub, End Function, or End Property».</dd><dt>Årsak</dt><dd>Modulnivå-<code>Const</code>/<code>Dim</code> plassert midt i modulen (etter en kommentarblokk) i stedet for øverst. Håkon mistenkte en apostrof-feil, men det kunne ikke reproduseres — flytting av deklarasjonen løste det.</dd><dt>Løsning</dt><dd>Alle modulnivå <code>Const</code>/<code>Dim</code> grupperes øverst, rett etter <code>Option Explicit</code>.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-and-or-ikke-kortslutning" data-cat="vba">
+  <h4>And/Or kortslutter ikke</h4>
+  <dl><dt>Symptom</dt><dd>Kode som forutsetter at høyre side av <code>And</code>/<code>Or</code> ikke evalueres når venstre side allerede avgjør resultatet, kan feile eller gi feil resultat (f.eks. tilgang til et objekt som er <code>Nothing</code>).</dd><dt>Årsak</dt><dd>VBAs <code>And</code>/<code>Or</code> evaluerer alltid BEGGE sider, i motsetning til kortslutning i mange andre språk.</dd><dt>Løsning</dt><dd>Bruk nøstede <code>If</code>-setninger der kortslutning trengs.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-unload-me-stille-feil" data-cat="msforms">
+  <h4>Unload Me + Sub-kall i samme skjemas kodemodul feiler stille</h4>
+  <dl><dt>Symptom</dt><dd>Ingen feilmelding, men navigasjonen (f.eks. bytte til neste skjema) skjer ikke.</dd><dt>Årsak</dt><dd><code>Unload Me</code> etterfulgt av et kall til en annen Sub i SAMME skjemas kodemodul feiler helt stille.</dd><dt>Løsning</dt><dd>Gjør navigasjonen inline i samme prosedyre, f.eks. mønsteret <code>Unload Me</code> → <code>On Error Resume Next</code> → <code>AppActivate Application.Caption</code> → <code>Show</code>, alt i én prosedyre (brukt konsekvent for skjemabytte i Kontaktsentralen).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-msgbox-uendelig-lokke" data-cat="msforms">
+  <h4>MsgBox i musehendelse kan gi uendelig dialogløkke</h4>
+  <dl><dt>Symptom</dt><dd>Windows' meldingskø henger i en løkke av gjentatte dialogbokser.</dd><dt>Årsak</dt><dd><code>MsgBox</code> kalt INNI en museklikk-hendelseshandler kan trigge løkken på grunn av hvordan museklikk-meldinger prosesseres.</dd><dt>Løsning</dt><dd>Unngå <code>MsgBox</code> direkte i museklikk-handlere; flytt logikken ut eller bruk andre tilbakemeldingsmekanismer.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-tekst-blir-tall-i-celle" data-cat="excel">
+  <h4>«0012» blir tallet 12 ved skriving til celle</h4>
+  <dl><dt>Symptom</dt><dd>En streng som «0012» (f.eks. en ID) skrevet til en Excel-celle vises/lagres som tallet 12, ledende nuller tapt.</dd><dt>Årsak</dt><dd>Excel tolker en tallignende streng skrevet til <code>.Value</code> som tall med mindre cellen eksplisitt er formatert som tekst.</dd><dt>Løsning</dt><dd>Sett kolonnens <code>NumberFormat = "@"</code> før skriving, og sammenlign nøkler som trimmet <code>CStr</code> på begge sider ved oppslag.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-range-value-skalar-vs-array" data-cat="excel">
+  <h4>Range.Value på én celle gir skalar, ikke array</h4>
+  <dl><dt>Symptom</dt><dd>Kode som forventer et array fra <code>Range.Value</code> feiler når rangen tilfeldigvis er én celle.</dd><dt>Årsak</dt><dd>VBA returnerer en skalarverdi (ikke et 2D-array) når <code>Range.Value</code> leses på nøyaktig én celle.</dd><dt>Løsning</dt><dd>Sjekk <code>IsArray</code> før løkke over resultatet. Sjekk også <code>IsError</code> før <code>CStr</code> på feilverdier (#N/A o.l.) i et Variant-array. Å lese hele kolonner som arrayer er langt raskere enn <code>Cells(r,c)</code> i løkke (nødvendig i Kontaktsentralen når lista bygges på hvert tastetrykk i søkefeltet); enkel stabil boblesortering holder fint for ca. 325 rader.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-shapes-generisk-filter" data-cat="vba">
+  <h4>Aldri fjern Shapes/knapper via generisk filter</h4>
+  <dl><dt>Symptom</dt><dd>En annen makros knapp eller kontroll forsvinner utilsiktet ved avinstallasjon/oppdatering.</dd><dt>Årsak</dt><dd>Flere verktøy (Kolonnevelger, Mail-utsender, Makromeny, Kontaktsentralen) kan ha knapper på samme ark; et generisk navnefilter treffer feil objekter.</dd><dt>Løsning</dt><dd>Match alltid eksakt navn (komponentnavn og nøyaktig <code>OnAction</code>-streng) ved fjerning, aldri et generisk mønster. Kritisk for EMIs <code>-Uninstall</code>-krav på tvers av alle installere.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen, generell VBA-lærdom</p>
+</div>
+
+<div class="gotcha" id="g-categories-skilletegn-locale" data-cat="outlook">
+  <h4>MailItem.Categories-skilletegn er locale-avhengig</h4>
+  <dl><dt>Symptom</dt><dd>Splitting av <code>itm.Categories</code> bare på komma ga «0 kategoriserte rader».</dd><dt>Årsak</dt><dd>På norsk er komma desimaltegn, så Outlook bruker semikolon som listeskille i <code>Categories</code>-strengen; koden splittet bare på komma.</dd><dt>Løsning</dt><dd>Split på begge tegn med regex <code>[,;]+</code> (<code>KtsSplitKategorier</code>). Ved SKRIVING må Windows' listeskilletegn brukes (<code>HKCU\Control Panel\International\sList</code>) + mellomrom, ellers kan «A, B» bli ÉN kategori. Les alltid tilbake <code>itm.Categories</code> etter <code>Save</code> for å bekrefte.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-delte-postbokser-undermapper" data-cat="outlook">
+  <h4>Svar i delt postboks havner ofte i undermapper av Innboks</h4>
+  <dl><dt>Symptom</dt><dd>Skanningen fant 0 kategorier/svar til tross for at e-postene fantes i postboksen.</dd><dt>Årsak</dt><dd>En Outlook-regel filtrerte svarene inn i undermapper (f.eks. «1. e-post til rektor») under Innboks; koden leste bare den flate Innboks-mappa. Mappa selv heter engelsk «Inbox» under den norske delte postboksen (valgfritt navn, satt opp av brukeren i Oppsett) (prøv både «Innboks» og «Inbox»). Dette var rotårsaken til «0 kategorier» i lang tid.</dd><dt>Løsning</dt><dd><code>KtsSamleMapperRekursivt</code> samler Innboks + alle undermapper rekursivt; brukes av både <code>KjørSkann</code> og kategorihenting.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-kategorilister-store-vs-namespace" data-cat="outlook">
+  <h4>Postboksens kategorier vs. brukerens personlige liste</h4>
+  <dl><dt>Symptom</dt><dd>Kategoriliste i Oppsett/radside viste feil eller uønskede kategorier.</dd><dt>Årsak</dt><dd><code>ib.Store.Categories</code> er postboksens EGEN masterliste, mens <code>Namespace.Categories</code> er brukerens PERSONLIGE liste — Håkon ville ikke se sine private kategorier blandet inn.</dd><dt>Løsning</dt><dd>Bruk <code>Store.Categories</code> først; <code>namespace.Categories</code> kun som nødløsning. <code>Category.Color</code> er en <code>OlCategoryColor</code>-indeks 1–25 (egen RGB-oppslagstabell); 0/ukjent farge → vis grå.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-ndr-tomme-felt" data-cat="outlook">
+  <h4>NDR-elementer har ofte tomme standardfelt</h4>
+  <dl><dt>Symptom</dt><dd>Kode som leser <code>SenderEmailAddress</code>, <code>ReceivedTime</code> eller <code>To</code> feiler eller får tomme verdier på visse elementer.</dd><dt>Årsak</dt><dd>Non-delivery-rapporter (<code>MessageClass = "REPORT.IPM.Note.NDR"</code>, prefiks «Undeliverable: ») har ofte tomme felt sammenlignet med en vanlig <code>MailItem</code>. «Automatic reply: »-prefikset er eneste sikre signal på et automatisk svar (samme <code>MessageClass</code> som et vanlig svar, altså IKKE skillbart på klasse alene).</dd><dt>Løsning</dt><dd>Anta aldri at vanlige MailItem-felt er fylt på rapportelementer; klassifiser NDR på <code>MessageClass</code>-prefiks og autosvar på emneprefiks.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-exchange-avsender-x500" data-cat="outlook">
+  <h4>Interne Exchange-avsendere har X.500-adresse, ikke SMTP</h4>
+  <dl><dt>Symptom</dt><dd>E-postmatching mot avsenderadresse bommer for interne avsendere.</dd><dt>Årsak</dt><dd>Når <code>SenderEmailType = "EX"</code> er <code>SenderEmailAddress</code> en X.500-sti, ikke en SMTP-adresse. Samme problem gjelder CC-mottakere hentet via <code>Recipients</code> (Type=2).</dd><dt>Løsning</dt><dd>Bruk <code>Sender.GetExchangeUser().PrimarySmtpAddress</code> (og tilsvarende for CC) for å få en sammenlignbar SMTP-adresse.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-epostmatching-eksakt-adressesett" data-cat="outlook">
+  <h4>E-postmatching må være eksakt adressesett, ikke substreng</h4>
+  <dl><dt>Symptom</dt><dd>«anna@x.no» matchet feilaktig inni «hannah@x.no»; gjenkjenning som «10» matchet inni «1083».</dd><dt>Årsak</dt><dd>Gammel matching brukte <code>InStr(";" &amp; tekst &amp; ";", nal)</code>, en substreng-sjekk. Tilsvarende problem for gjenkjenningskolonner (skole-ID) matchet som ren tekst-substreng i emne/brødtekst.</dd><dt>Løsning</dt><dd>E-post: split på <code>,</code>/<code>;</code>, lowercase, trim, og sammenlign som EKSAKT adressesett (<code>KtsSplitAdresser</code>/<code>KtsHarFellesAdresse</code>). Gjenkjenning: match som HELE ORD via sen-bundet <code>VBScript.RegExp</code> med kanttegnsklasse <code>[^A-Za-z0-9æøåÆØÅ]</code>.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-getobject-vs-createobject" data-cat="outlook">
+  <h4>GetObject vs. CreateObject mot Outlook</h4>
+  <dl><dt>Symptom</dt><dd>En stille bakgrunnsoperasjon (f.eks. oppdatering av kategoriliste ved åpning av radsiden) starter uventet en ny Outlook-instans.</dd><dt>Årsak</dt><dd><code>CreateObject("Outlook.Application")</code> kan starte Outlook hvis det ikke allerede kjører; <code>GetObject(, "Outlook.Application")</code> bruker kun en allerede kjørende instans.</dd><dt>Løsning</dt><dd>Bruk alltid <code>GetObject</code> for stille oppdateringer som ikke skal forstyrre brukeren (f.eks. <code>KtsOppdaterKategorilisteStille</code>).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-items-restrict-startpunkt" data-cat="outlook">
+  <h4>Items.Restrict med startpunkt feiler stille</h4>
+  <dl><dt>Symptom</dt><dd>Skanningen kan i praksis ende opp med å lese alt uansett, uten synlig feilmelding.</dd><dt>Årsak</dt><dd><code>Items.Restrict</code>-filteret (<code>[ReceivedTime] &gt;= '</code> &amp; <code>Format(dato, "ddddd h:nn AMPM")</code> &amp; <code>'</code>) kan feile stille ved uventet datoformat/locale.</dd><dt>Løsning</dt><dd>Fall tilbake til å lese alle elementer hvis restrict-filteret feiler, i stedet for å la funksjonen krasje eller returnere ingenting.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-maildisplay-reset" data-cat="outlook">
+  <h4>MailItem.Display() nullstiller signatur, og Body har usynlige linjer</h4>
+  <dl><dt>Symptom</dt><dd>Signatur mangler etter programmatisk åpning av en e-post; sammenligning av brødtekst gir uventede treff/ikke-treff på slutten av teksten.</dd><dt>Årsak</dt><dd><code>MailItem.Display()</code> nullstiller signaturen i brødteksten OG <code>DeferredDeliveryTime</code>. <code>Body</code> (auto-konvertert fra <code>HTMLBody</code>) får ofte usynlige tomme linjer på slutten.</dd><dt>Løsning</dt><dd>Lagre/gjenopprett relevante felt rundt <code>Display()</code>-kallet ved behov; ikke stol på eksakt tekstsammenligning av <code>Body</code> uten trimming.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen, videreført fra Mail-utsender</p>
+</div>
+
+<div class="gotcha" id="g-thisworkbook-path-url" data-cat="excel">
+  <h4>ThisWorkbook.Path kan være en https-URL</h4>
+  <dl><dt>Symptom</dt><dd>Kode som bruker <code>ThisWorkbook.Path</code> med <code>Dir()</code> eller filsystemfunksjoner feiler.</dd><dt>Årsak</dt><dd>Med OneDrive/SharePoint-autosave PÅ returnerer <code>ThisWorkbook.Path</code> en <code>https://</code>-URL i stedet for en lokal sti; <code>Dir()</code> kan ikke lese URL-er.</dd><dt>Løsning</dt><dd>Oversett via OneDrives registernøkkel <code>HKCU\Software\SyncEngines\Providers\OneDrive</code> til den faktiske lokale synk-mappen.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen, videreført fra Mail-utsender</p>
+</div>
+
+<div class="gotcha" id="g-syntetiske-mailobjekter" data-cat="outlook">
+  <h4>Å lage syntetiske Outlook-mailobjekter via COM er farlig</h4>
+  <dl><dt>Symptom</dt><dd>Test-e-poster havnet i Håkons EKTE «Kladd» (Drafts)-mappe, selv med eksplisitt scoping mot en isolert test-PST.</dd><dt>Årsak</dt><dd><code>folder.Items.Add(olMailItem)</code> + <code>.Save()</code> lagrer IKKE pålitelig i mappa brukt ved <code>Add()</code> — en usendt MailItems <code>.Save()</code> kan omdirigere til STANDARDPROFILENS Drafts-mappe i stedet, selv når <code>folder.Store.FilePath</code> ble verifisert mot en isolert test-PST på forhånd. Skjedde to ganger (5, så 1 til); begge ble oppdaget og permanent slettet fra Kladd og Slettede elementer.</dd><dt>Løsning</dt><dd>Ikke fabrikker Outlook-mailobjekter for test i det hele tatt — det finnes ingen funnet trygg metode. Test av skannemotoren mot ekte Outlook må gjøres av Håkon selv, ved at han klikker.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-kategori-skriving-delt-postboks" data-cat="outlook">
+  <h4>Kategoriskriving går til delt postboks</h4>
+  <dl><dt>Symptom</dt><dd>En feilaktig eller for tidlig kategoriendring påvirker en postboks flere personer bruker.</dd><dt>Årsak</dt><dd>Makroens eneste skrivehandling mot Outlook (<code>MailItem.Categories</code> + <code>Save</code>) treffer den DELTE postboksen (valgfritt navn, satt opp av brukeren i Oppsett), ikke en privat kopi.</dd><dt>Løsning</dt><dd>Skriving skjer kun ved eksplisitt «Lagre i Outlook»-klikk, kun på den valgte e-posten. Anbefal alltid at Håkon tester på én testmail først.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-installer-kobler-til-kjorende-excel" data-cat="process">
+  <h4>Installeren kobler seg til brukerens kjørende Excel</h4>
+  <dl><dt>Symptom</dt><dd>En testfil åpnet seg i Håkons EGEN Excel ved siden av Hovedarbeidsboken, gjentatte ganger, også når <code>Get-Process EXCEL</code> var tom ved starten av økten fordi han startet Excel underveis.</dd><dt>Årsak</dt><dd><code>Kontaktsentralen.ps1</code> bruker <code>GetActiveObject('Excel.Application')</code> / <code>[Runtime.InteropServices.Marshal]::GetActiveObject</code>, som kobler til HVILKEN SOM HELST allerede kjørende Excel-prosess — ikke nødvendigvis testerens egen.</dd><dt>Løsning</dt><dd>Bruk alltid <code>-NyExcelInstans</code> (egen testbryter, de andre installerne har den ikke) for testinstallasjoner: egen PID = prosesser etter minus prosesser før, bind med <code>[Marshal]::BindToMoniker(fil)</code>, verifiser at <code>$app.Workbooks</code> bare inneholder testfila før <code>Quit()</code>. Aldri <code>Get-Process EXCEL | Stop-Process</code> blankt — det dreper brukerens åpne arbeid; les alltid <code>Get-Process EXCEL</code> read-only først og stopp kun PID-er man selv startet.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-save-flytter-onedrive" data-cat="excel">
+  <h4>Workbook.Save() kan stille flytte testfil til ekte OneDrive</h4>
+  <dl><dt>Symptom</dt><dd>Etter <code>.Save()</code> på en testfil i <code>%TEMP%</code> viste <code>Workbook.FullName</code> en <code>https://uio-my.sharepoint.com/...</code>-URL, med en matchende kopi i Håkons EKTE <code>OneDrive - Universitetet i Oslo\Documents\</code>. Selve Temp-filens diskmarkør ble aldri endret (Excel byttet bare «forestillingen» om filen).</dd><dt>Årsak</dt><dd>M365 «lagre til OneDrive som standard»/kjent-mappe-omdirigering på den administrerte universitetsmaskinen, trolig en policy — ikke noe Claude gjorde prosedyremessig feil.</dd><dt>Løsning</dt><dd>Bruk <code>Workbook.SaveCopyAs(sti)</code> i stedet for <code>.Save()</code> for testfiler; det skriver bytes uten å endre dokumentets identitet, og triggerte IKKE omdirigeringen. <code>SaveCopyAs</code> feiler hvis målstien er samme som en allerede åpen fil — lagre til et annet midlertidig navn først, lukk uten å lagre (<code>wb.Close $false</code>), og flytt/omdøp etterpå. Sjekk alltid <code>Workbook.FullName</code> etter ENHVER lagringsoperasjon; testfiler skal kun ligge i scratchpad, aldri andre steder i OneDrive «bare fordi Claude kan».</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-installer-ikke-lagrer-testfil" data-cat="installer">
+  <h4>Installeren lagrer aldri målfila (by design) — stale bytes ved test fra ny prosess</h4>
+  <dl><dt>Symptom</dt><dd>En fiks som ble installert ser ut til å «ikke virke» når fila åpnes fra en fersk, isolert prosess for test.</dd><dt>Årsak</dt><dd>Installeren kaller aldri <code>.Save()</code> på et vanlig install/oppdater (kun <code>-Uninstall</code> gjør det) — endringen finnes derfor bare I MINNET i den Excel-prosessen installeren koblet til. En ny prosess som åpner fila fra disk leser gamle, ufiksede bytes.</dd><dt>Løsning</dt><dd>Etter hver installerkjøring mot en testfil: persister eksplisitt med <code>SaveCopyAs</code> (se <a href="#g-save-flytter-onedrive">gotcha</a>) FØR fila testes fra en ny prosess — ellers testes gammel kode og konklusjonene blir feil.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-saveas-maxpath" data-cat="powershell">
+  <h4>SaveAs feiler nær MAX_PATH</h4>
+  <dl><dt>Symptom</dt><dd>Generisk COM-feil «Kan ikke hente SaveAs-egenskapen til Workbook-klassen».</dd><dt>Årsak</dt><dd>Full målsti nær/over den klassiske 260-tegns Windows MAX_PATH-grensen (~257+ tegn feiler pålitelig, ~244 tegn virket). Claudes scratchpad-mappestruktur alene spiser rundt 210+ tegn.</dd><dt>Løsning</dt><dd>Lag fila på en KORT sti (f.eks. <code>%TEMP%\kts-kastefil.xlsm</code>) og flytt den inn i scratchpad med <code>Move-Item</code> etterpå. Ikke et problem for selve installer-skriptet, som bare gjør <code>Workbooks.Open</code> på en eksisterende fil, aldri <code>SaveAs</code>.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-utf8-bom" data-cat="encoding">
+  <h4>PowerShell-fila må beholde UTF-8 BOM</h4>
+  <dl><dt>Symptom</dt><dd>Norske tegn (æøå) blir «?» eller rot i installer/VBA-kode.</dd><dt>Årsak</dt><dd><code>.ps1</code>-fila må ha UTF-8 med BOM; verktøy kan miste BOM ved lagring, og fila bruker LF-linjeskift.</dd><dt>Løsning</dt><dd>Sjekk <code>head -c 3 fil | xxd</code> (skal gi <code>efbbbf</code>) etter store endringer. Skriv med <code>New-Object Text.UTF8Encoding($true)</code> ved <code>WriteAllText</code>. Gjelder generelt for alle VBA-kildefiler også (feil koding gir samme «?»-symptom).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-ny-komponent-alle-steder" data-cat="installer">
+  <h4>Hver ny VBA-komponent må inn alle steder i installeren</h4>
+  <dl><dt>Symptom</dt><dd>En ny modul/skjema forsvinner ved oppdatering, eller <code>-Uninstall</code> fjerner ikke alt.</dd><dt>Årsak</dt><dd>Komponentnavn er listet flere separate steder i installer-skriptet: avinstaller-lista, fjern-før-oppdatering-lista, import-lista og bekreftelses-utskriften. Alle må holdes i synk manuelt.</dd><dt>Løsning</dt><dd>Ved hver ny komponent (f.eks. <code>frmKtsUavklart</code> i v0.5.0): legg til i ALLE fire lister, og verifiser med en reell <code>-Uninstall</code>-kjøring at nøyaktig de forventede komponentene fjernes.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>

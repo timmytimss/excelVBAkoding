@@ -1,0 +1,106 @@
+<section id="ref-hakon" data-nav="Referanse|Håkon — arbeidsstil">
+  <h2>Håkon — rolle og arbeidsstil</h2>
+  <p class="lead">Fellestrekk på tvers av alt arbeidet, deretter modul-spesifikke tillegg der de finnes. Se også <a href="#arbeidsprosess">Hvordan Håkon liker å jobbe</a> for en fyldigere gjennomgang av delegering, ressursbruk og personvern.</p>
+  <h3>Generelt, gjelder alle moduler</h3>
+<ul>
+  <li>UiO (Universitetet i Oslo), product owner/tester for VBA/PowerShell-verktøyene, ikke selv utvikler — beskriv ting som observerbar oppførsel og resultat, ikke kodedetaljer, med mindre han spør. Han tester selv aktivt (klikker, rapporterer eksakte symptomer), ofte mot ekte data, og gir presis, iterativ tilbakemelding — ofte med skjermbilder.</li>
+  <li>Språk: norsk bokmål i alt han ser — svar, UI-tekster, feilmeldinger, kommentarer på siden. Ekte æøå, ikke ASCII-erstatninger.</li>
+  <li>Vil ha rotårsaken forklart, ikke bare fiksen, og setter pris på ærlighet om feil og begrensninger fremfor at de glattes over. Bekrefter selv når noe faktisk virker — anta aldri «ferdig» eller «virker» før han har sagt det.</li>
+  <li>Korrigerer terminologi presist når to ting blandes sammen (f.eks. «huke av» vs. «markere» i Mail-utsender) — hold slike skiller strengt.</li>
+  <li><strong>Harde sikkerhets-/personvernregler, gjelder ALLE moduler:</strong> les aldri personinfo eller innhold fra hans ekte, levende Excel-filer eller postboks — ikke engang «bare struktur» som kolonnenavn eller konfigverdier — verken direkte eller via en subagent. Test alltid mot en oppdiktet, engangs eller gjenbrukt kastefil i prosjektmappa, aldri mot ekte data. Rør aldri hans ekte, åpne Excel-instans uten å spørre. Send aldri ekte e-post uten eksplisitt bekreftelse. Slett aldri noe uten å spørre — flytt/arkiver i stedet.</li>
+  <li>Vil ha spørsmål presentert lettfattelig og oversiktlig (gjerne med en anbefaling) når det finnes reelle valg, i stedet for at man bare velger selv — men for rutinemessige/tekniske avgjørelser forventes selvstendig fremdrift.</li>
+  <li><strong>Liker at oppgaver deles opp og delegeres til parallelle subagenter</strong> for store, godt avgrensede jobber (som selve byggingen av denne siden) — men vil bli SPURT først før det tas i bruk, ikke få det som en stilltiende standardmetode. Se <a href="#arbeidsprosess-delegering">Arbeidsprosess</a>.</li>
+  <li><strong>Bevisst ressursbruk:</strong> match omfanget av testing/verifisering til hvor stor og risikabel endringen faktisk er — ikke kjør unødvendig mange runder for en liten endring. Se <a href="#arbeidsprosess-usage">Arbeidsprosess</a>.</li>
+  <li>Setter pris på at lærdom NOTERES og DELES videre — derfor denne siden.</li>
+  <li>Miljø: Windows 11, Windows PowerShell 5.1 (ikke PowerShell 7), klassisk Office/Outlook (ikke «nye Outlook»), norsk regional innstilling, alt arbeid i OneDrive-synkede mapper, ofte flere skjermer og varierende DPI i bruk (bærbar + stor skjerm) — noe som har forårsaket egne MSForms-layoutfallgruver, se «Kjente fallgruver».</li>
+</ul>
+  <h3>Modul-spesifikke tillegg</h3>
+  <details class="acc"><summary>Excel Macro Installer (EMI)</summary><div>
+<ul>
+  <li>Ser på Excel Macro Installer (EMI) som den PERMANENTE, sentrale hjemmen for alle makroene fremover, ikke bare en launcher — reframet det eksplisitt slik selv.</li>
+  <li>Foretrekker «Installerte filer» (ett kort per Excel-fil) fremfor en rå DataGridView-rad per (fil, makro): «Skulle gjerne likt at det var én oppføring per fil, og at filnavnet var tydeligere».</li>
+  <li>Vil ha «Installerte filer» som standard/venstre fane, ikke «Makroer» — filoversikten er det naturlige utgangspunktet for ham.</li>
+  <li>Vil se hele filstien, ikke avkuttet med «…» — selv med lange OneDrive-stier.</li>
+  <li>Ønsket «fjerne filer» og «fjerne makroer» som to tydelig atskilte handlinger med ulike bekreftelsesdialoger: «fjerne fil» = bare sporing (rører ikke Excel-fila), «fjerne makro» = ekte avinstallering (fjerner VBA-kode/knapp FRA SELVE fila) — presiserte selv forskjellen da han ble spurt.</li>
+  <li>Vil at en ny makro skal dukke opp av seg selv i Macros-mappa uten at EMIs egen kode må endres («launcheren er bevisst dum/generisk»).</li>
+  <li>Ba eksplisitt om ikonene «uten bakgrunn og litt mer fancy med finere farger» ved en tidligere runde — la merke til og påpekte selv når to ikoners bakgrunnsfarger ble for like (Kolonnevelger vs. Nettskjema-henter sitt første utkast).</li>
+  <li>Sier fra når noe faktisk fungerer («Det fungererer!!») — anta aldri «ferdig» før han har bekreftet det selv, spesielt for interaksjon som bare et ekte klikk kan verifisere.</li>
+  <li>Godtar/ønsker en plan først ved omfattende endringer («ganske omfattende» — Plan Mode), og vil ofte ha reelle valg lagt frem via spørsmål før man går videre.</li>
+  <li>Spør alltid før: å lukke hans åpne Excel/Testfil/EMI (han har det ofte åpent selv for å teste); å røre noe som kan være ekte (Hovedarbeidsboken.xlsm røres aldri — han installerer selv der via EMI).</li>
+  <li>Foretrekker at ting flyttes/arkiveres fremfor slettes (gjelder også gamle .exe-sikkerhetskopier og utrangerte script-versjoner).</li>
+  <li>Setter pris på at man innrømmer feil/begrensninger åpent, og vil ha rotårsaken forklart, ikke bare at noe er «fikset».</li>
+  <li>Sender skjermbilder med korte, presise klager om layout («litt mer symmetrisk», «plassert rart», «knappene nederst klippes») — iterativ, skjermbilde-drevet arbeidsstil med mange raske runder.</li>
+  <li>Ønsker jevn, symmetrisk avstand (typisk 10 px) og ingenting klippet — test mot liten skjerm (≈419 pt brukbar høyde) og høy DPI, ikke bare standardoppløsning.</li>
+  <li>Personlig, uformell tone; norsk bokmål i alt UI-tekst/feilmeldinger som vises til ham; ekte æøå i alt en bruker ser.</li>
+  <li>Ønsker at lærdom fra hver byggeøkt NOTERES og DELES videre til andre sessions/etterfølgere, ikke går tapt når en økt legges ned.</li>
+  <li>Miljø: Windows 11 (build 26200), Windows PowerShell 5.1, klassisk Office, norsk regionalinnstilling, flere skjermer, alt arbeid i OneDrive-synkede mapper.</li>
+</ul>
+  </div></details>
+  <details class="acc"><summary>Mail-utsender</summary><div>
+<ul>
+  <li>Språk: norsk bokmål i alt brukeren ser (svar, UI-tekster, feilmeldinger) — ekte æøå, ikke ASCII-erstatninger. Kodekommentarer kan være ASCII. Personlig, uformell tone.</li>
+  <li>Egen terminologi i Mail-utsender: «huke av» (får hake i en avkrysningsboks) er noe annet enn «markere» (raden vises i forhåndsvisningen) — de to skal aldri utløses av samme klikk.</li>
+  <li>Arbeidsstil: iterativ og skjermbilde-drevet — sender skjermbilder med korte, presise klager («litt mer symmetrisk», «plassert rart», «knappene nederst klippes»). Mange raske runder er normalt. Vil ha rotårsaken forklart, ikke bare fiksen; setter pris på at man innrømmer feil og begrensninger åpent. Bekrefter selv når noe faktisk virker («Det fungererer!!») — anta aldri at noe er ferdig før han har sagt det, spesielt for interaksjon som bare ekte klikk kan bekrefte.</li>
+  <li>Store oppgaver: godtar/ønsker en plan først; vil ofte ha reelle valg presentert som spørsmål når det finnes flere gode alternativer, i stedet for at man bare velger selv.</li>
+  <li>SPØR ALLTID FØR: man lukker hans åpne Excel/testfiler; man styrer den ekte musepekeren; man rører noe som kan være hans ekte, levende data; man sender ekte e-post; man sletter noe (flytt/arkiver i stedet).</li>
+  <li>UI-ønsker: ingen unødvendige bekreftelsesdialoger i rutineflyt (en passiv infolinje er bedre — «for mange klikk» er en reell klage); dropdowns fremfor fritekst der feiltasting er mulig; gjerne fet skrift/farger for å skille informasjon; jevn, symmetrisk avstand; ingenting skal klippes — test mot en liten skjerm (ca. 419 pt brukbar høyde) og høy DPI; enkle, forståelige varsler; kontrastrike ikoner.</li>
+  <li>Sikkerhet i praksis: masseutsendelse skal kun skje etter en tydelig bekreftelsesdialog med antall/avsender/leveringsmåte; tester går alltid kun til hans egen adresse; den delte postboksen (valgfritt navn, satt opp av brukeren i Oppsett) brukes som avsender for ekte utsendelser (bekreftet ekte Send As); flere personer kan kjøre samme makro — ikke hardkod avsender uten at han ber om det.</li>
+  <li>Ønsker at lærdom fra hver sesjon NOTERES og DELES videre med andre parallelle sessions.</li>
+  <li>Miljø: Windows 11, Windows PowerShell 5.1 (ikke PowerShell 7), klassisk Office/Outlook (ikke «nye Outlook»), norsk regional innstilling, alt arbeid ligger i OneDrive-synkede mapper, flere skjermer i bruk.</li>
+</ul>
+  </div></details>
+  <details class="acc"><summary>Kontaktsentralen</summary><div>
+<ul>
+  <li>Product owner/tester, ikke utvikler — beskriv observerbar oppførsel og resultater, ikke kodedetaljer, med mindre han spør. Reagerer presist på terminologi og korrigerer den direkte.</li>
+  <li>Vil ha ærlige tilbakemeldinger uten pynt: si tydelig hva som er testet og hva som ikke er det, og hva som krever hans egen test.</li>
+  <li>Foretrekker norsk bokmål i all kommunikasjon om dette prosjektet.</li>
+  <li>Godkjenner gjerne Claudes anbefalinger samlet («jeg liker alle dine anbefalinger, kjør på»), men vil ha store endringer rullet ut i etapper/trinn slik at han kan teste mellom hvert trinn.</li>
+  <li>Ved redesign/større usikkerhet: «still spørsmål, ikke kod før jeg sier klar». Vil ha spørsmål stilt lettfattelig og oversiktlig, gjerne med en konkret anbefaling vedlagt.</li>
+  <li>Ved lite «usage» tilgjengelig sier han «gjør kodingen uten for mye testing» — men kompileringssjekk er likevel obligatorisk uansett.</li>
+  <li>Absolutt personvernkrav: Claude skal ALDRI lese personinfo fra hans ekte Excel-filer eller Outlook-postboks, uansett formål, og uansett om det virker som «bare struktur». Ingen delegering til subagent heller. Testfiler kun i Claudes egen scratchpad, aldri andre steder i hans OneDrive.</li>
+  <li>Vil vite noe om en ekte fil/postboks: spør ham direkte i stedet for å undersøke selv.</li>
+  <li>UI-preferanser: fargekodede knapper (grønn/blågrå/oransje/blå etter funksjon); vinduer som ikke kuttes uansett skjerm (bruker både laptop og stor monitor); modeless dashbord som hopper i tabellen uten å tvinge scrolling eller stjele fokus; knapper fremfor fritekstfelt der det er mulig (f.eks. kategorivalg); søkefelt plassert logisk i forhold til listene det filtrerer; dobbeltklikk som snarvei der det gir mening (åpne e-post, åpne detaljside); ingen «Lukk»/«Gå til celle»-knapper (bruker markering/hopp og «Hovedmeny» i stedet); ingen automatisk skanning — han vil styre selv når noe skjer.</li>
+  <li>Skjermbilder han sender av egen skjerm kan inneholde ekte data — ikke gjengi innholdet i dem, og be ham dekke til navn/e-poster.</li>
+  <li>Kjører selv installasjon via «Excel Macro Installer.exe» og Makromeny mot sin hovedfil. Sletter gjerne arkknapper og bruker Makromeny i stedet — ikke gjenskap en knapp automatisk ved oppdatering. Må selv bruke en ny versjon av installeren for at en oppdatering skal slå gjennom («Du må bumpe ny versjon»).</li>
+  <li>Flere parallelle Claude-sesjoner for ulike makroer koordineres av en egen sentral koordineringssesjon.</li>
+  <li>Klikk-tester selv alt som berører ekte Outlook/ekte fil, og finner jevnlig reelle feil som automatisert testing ikke fanger — hans egen interaktive testing er en reell og verdifull del av kvalitetssikringen, ikke bare en formalitet.</li>
+</ul>
+  </div></details>
+  <details class="acc"><summary>Nettskjema-henter</summary><div>
+<ul>
+  <li>Håkon er product owner/tester ved UiO, ikke utvikler; forklaringer og statusmeldinger bør være på norsk bokmål, presise og konkrete, uten unødig teknisk sjargong.</li>
+  <li>Vil selv styre når data hentes: bevisst INGEN automatisk bakgrunnsoppdatering i Nettskjema-henter; oppdatering skjer kun ved eksplisitt knappetrykk/avkrysning.</li>
+  <li>Forkastet v3.1.0-løsningen der kolonneinnstillinger lå i et skjult ark som ble gjort synlig for redigering — ville ha en ordentlig DIALOG, ikke et ark som plutselig dukker opp.</li>
+  <li>Har en egen, manuelt vedlikeholdt snarveimakro (<code>OppdaterNettskjema</code> i Hovedarbeidsboken) BEVISST holdt utenfor EMI-installasjonen, som «en liten egenlaget snarvei» — forventer at EMI-modulenes offentlige kontrakt (funksjonsnavn/signaturer den kaller) forblir bakoverkompatibel siden installeren ikke oppdaterer hans egen kode.</li>
+  <li>Bruker strukturerte referanser og kryss-ark-formler i egne arbeidsbøker (Hovedarbeidsboken); ListObject-identitet og stabile tabellnavn er «hellig» for ham — brudd på dette (frosne #REF!-formler) er en alvorlig regresjon, ikke en kosmetisk detalj.</li>
+  <li>Har selv omdøpt standardtabellnavn til egne, meningsfulle navn (<code>NS_SK_tbl</code>, <code>NS_DS_tbl</code>) fremfor å beholde autogenererte <code>&lt;arknavn&gt;_tbl</code>.</li>
+  <li>Svært bevisst på personvern: respondentdata i Nettskjema skal ALDRI leses eller vises under bygging/testing, kun struktur, formler, overskrifter og mønstertellinger. Ga ved ett tilfelle uttrykkelig, avgrenset tillatelse til read-only-inspeksjon av en formelfeil i Hovedarbeidsboken via ROT — ikke en stående fullmakt.</li>
+  <li>Rapporterer feil i egne ord/symptomer (f.eks. «alle får overflow» om en kolonnebredde-visning som senere viste seg å være noe helt annet enn den faktiske Overflow-runtime-feilen) — symptombeskrivelsen hans er verdifull, men den underliggende tekniske årsaken må verifiseres uavhengig.</li>
+  <li>Oppdaget selv mojibake-feil i respondentdata ved å sammenligne med Nettskjemas egen «Last ned Excel»-eksport — leser altså strukturen/kvaliteten på utdata selv, ikke bare stoler blindt på verktøyet.</li>
+  <li>Kommuniserer høflig og lite teknisk i eksterne support-saker (eksempel: RT-sak til Nettskjema-utvikler — kort, vennlig, takker til slutt) fremfor å gå i detalj om egen kode.</li>
+  <li>Forventer versjonsnummer som økes ved enhver kodeendring, og statusord som «I drift»/«Under utvikling»/«Planlagt» — aldri «ferdig»/«done» om et verktøy i kontinuerlig utvikling.</li>
+  <li>Deler arbeidsbøker med kolleger og forventer at det «bare virker» for dem uten at de må konfigurere Credential Manager selv — sensitiv info (Client Secret) i arbeidsboken er en bevisst avveining for portabilitet, ikke en tilfeldighet.</li>
+  <li>Vil ha én knapp/ett sted for hver funksjon (hovedmeny med avkrysningsliste, fargede knapper) fremfor spredte kontroller; har aktivt bedt om å fjerne overflødige elementer fra grensesnittet (v3.22.1: fjernet raden med antall valgt/hjelpetekst/«Velg alle»/«Fjern alle»).</li>
+  <li>Kildene nevner at maskinen hans går inn i en VBA-feilsøkingsmodus ved kjøretidsfeil på en måte som kan henge en usynlig/automatisert testkjøring — relevant bakgrunn når egne makroer testes automatisert på hans oppsett.</li>
+</ul>
+  </div></details>
+  <details class="acc"><summary>Makromeny</summary><div>
+<ul>
+  <li>Språk: norsk bokmål. Korte, konkrete og direkte svar («Fortsett», «Ta en pause»); ærlig rapportering, si nøyaktig hva som er testet og hva som ikke er det.</li>
+  <li>Absolutt: rør ikke Hovedarbeidsboken og ikke andre levende Excel-filer («Du skal ikke gjøre noe med Hovedarbeidsboken!»). All testing i egne kastefiler med unike navn.</li>
+  <li>Vil varsles og spørres før noe som kan påvirke filene hans. Hvis han selv åpner verktøyet i sin fil under testing, vent på ham («Jeg lukker nå») og be om lov.</li>
+  <li>Installasjon/avinstallasjon skal aldri lagre brukerens fil og aldri hardkode stier; <code>-Uninstall</code> fjerner bare egne, eksakt navngitte komponenter.</li>
+  <li>Alle verktøy skal installeres via EMI som plug-ins på samme mønster (én .ps1, innebygd VBA, versjonsmarkør, stille oppdatering).</li>
+  <li>UI: moderne, enkelt og tydelig, med tydelige farger og «ikke så mye fjas». Foretrekker app-lignende fliser, ett klikk, ingen Lukk-knapp (men «Oppdater liste» beholdes), æøå overalt og ingen unødvendig «laster»-markør.</li>
+  <li>Ikoner: unike farger og ikon per makro. Kolonnevelger- og Mail-utsender-ikonene er stilreferansen. Claudes genererte ikoner ble avvist («ikke så fine», inkonsekvent stil); han tegner egne PNG-er uten bakgrunn. Han har sagt «ikke lag noen flere» ikoner: ikonene i <code>Resources</code> er hans og endelige.</li>
+  <li>Menyer skal bare vise det som faktisk er installert i den aktuelle arbeidsboken («jeg vil bare se makroene som er installert i den»), ikke en fast liste.</li>
+  <li>Kommer med konkrete idéer selv (f.eks. Ark-knapp som fane som ikke navigerer); vil se at ønsket hans faktisk fungerer i hans egen arbeidsflyt, f.eks. brukte han å slette knapper for Ark-modus, så deteksjon må ikke bero på knapper.</li>
+  <li>Håkon er product owner/tester, ikke utvikler: gi ham trinnvise, forståelige instruksjoner og ekte klikk-tester der automatisering ikke rekker (f.eks. ekte museklikk på UserForm-flis).</li>
+</ul>
+  </div></details>
+  <details class="acc"><summary>Tabellorganisering / Formateringskontroll</summary><div>
+<ul>
+  <li>Tabellorganisering og Formateringskontroll er lav prioritet akkurat nå (ingen av dem har en første versjon i drift ennå) — men lærdommen om dem skal likevel bevares siden sessionene og kildemappene deres legges ned.</li>
+</ul>
+  </div></details>
+</section>

@@ -1,0 +1,249 @@
+<div class="gotcha" id="g-ns-frosne-referanser" data-cat="excel">
+  <h4>#REF!/frosne formler etter Unlist eller rebuild av ListObject</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Håkons strukturerte kryss-ARK-formler (f.eks. <code>=SUM(Tabell[Kol])</code> på et annet ark) fryser til statiske celleområder eller blir <code>#REF!</code> etter en henting.</dd>
+    <dt>Årsak</dt><dd><code>Unlist</code> (eller <code>ListObject.Delete</code> + gjenoppbygging) fjerner selve ListObject-identiteten. Excel kan da ikke lenger følge den strukturerte referansen til noe levende, og den fryses til det siste kjente området. Dette ble FEILAKTIG trodd løst i v3.10.0 fordi testen brukte en formel i samme arbeidsbok og samme henting-syklus (falsk OK).</dd>
+    <dt>Løsning</dt><dd>Bygg tabellen KUN én gang (<code>ListObjects.Add</code>). All senere skriving skjer via <code>ListRows.Add</code>/<code>ListColumns.Add</code> mot den eksisterende tabellen, aldri sletting/gjenoppbygging (UPSERT-arkitekturen, v3.20.0+). Test alltid med en formel på et ANNET ark og les <code>.Formula</code> tilbake (ikke <code>.Value</code>) etter hver syklus.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A1; historikk v3.6–v3.10)</p>
+</div>
+
+<div class="gotcha" id="g-ns-resize-detabler" data-cat="excel">
+  <h4>ListObject.Resize/Add-Delete-løkker gjør tabellen stille om til et vanlig område</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kolonner «forsvinner»; ingen feilmelding underveis.</dd>
+    <dt>Årsak</dt><dd><code>ListObject.Resize</code> med BÅDE rad- og kolonneendring i ETT kall kaster «Subscript out of range» (forsøkt ca. v3.6.0). Løkker med <code>ListRows.Add/Delete</code> og <code>ListColumns.Add/Delete</code>, eller et todelt Resize (rader, så kolonner) (ca. v3.7–v3.9), gjør i stedet tabellen STILLE til et vanlig celleområde: <code>ws.ListObjects.Count</code> blir 0, ingen runtime-feil.</dd>
+    <dt>Løsning</dt><dd>Unngå kombinert Resize og Add/Delete-løkker helt; bruk kun additiv <code>ListRows.Add</code>/<code>ListColumns.Add</code> (aldri fjerning). Test: sjekk <code>ListObjects.Count</code> og tabellnavn etter HVER operasjon under utvikling.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A2)</p>
+</div>
+
+<div class="gotcha" id="g-ns-listrows-add-utenfor" data-cat="excel">
+  <h4>ListRows.Add uten AlwaysInsert kan skrive data utenfor tabellen</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En ny rad (konkret: en ny NS_DS-rad) havnet på regnearkraden rett UNDER tabellen i stedet for inni den, og ble usynlig for Power Query (som kun ser <code>Excel.CurrentWorkbook(){[Name="..."]}[Content]</code>, altså tabellens faktiske DataBodyRange).</dd>
+    <dt>Årsak</dt><dd><code>tbl.ListRows.Add</code> uten <code>AlwaysInsert:=True</code> kan legge dataene på regnearkraden rett under tabellen hvis noe allerede står der.</dd>
+    <dt>Løsning</dt><dd><code>ListRows.Add(AlwaysInsert:=True)</code> ETTERFULGT av verifisering: <code>ListRows.Count</code> økte med 1, <code>DataBodyRange &lt;&gt; Nothing</code>, radindeks gyldig, siste rad = <code>HeaderRowRange.Row + ListRows.Count</code>. Ved avvik: <code>Err.Raise</code> (1061–1063) i stedet for stille feil (v3.20.1).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A3; v3.20.1)</p>
+</div>
+
+<div class="gotcha" id="g-ns-kapasitetsrader" data-cat="excel">
+  <h4>«Kapasitetsbuffer»-rader inne i tabellen gir tomme rader nedstrøms</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Tom rad dukker opp i Power Query-resultatet eller i formler som <code>COUNTA</code>/<code>XOPPSLAG</code>.</dd>
+    <dt>Årsak</dt><dd>v3.19.0 forsøkte en tabell med 1,5x radkapasitet (skriv inn uten å endre dimensjon, for ytelse). De tomme fyllradene lå INNE i tabellens DataBodyRange, så Power Query og formler plukket dem opp som ekte (tomme) rader.</dd>
+    <dt>Løsning</dt><dd>FORKASTET i v3.19.0. Ingen ledig buffer skal noensinne ligge inne i en delt tabell; tabellen skal kun inneholde ekte rader.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A4; v3.19.0, forkastet)</p>
+</div>
+
+<div class="gotcha" id="g-ns-array-tom-vs-streng" data-cat="excel">
+  <h4>Empty vs. "" i 2D-array-skriving gir ulik celletype</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>COUNTA</code>/<code>ISBLANK</code> gir uventet resultat for en celle som «skulle» være tom.</dd>
+    <dt>Årsak</dt><dd>Ved <code>Range.Value = 2D-array</code>: et <code>Empty</code>-element gir en EKTE tom celle (som <code>ClearContents</code>, <code>ISBLANK</code>=True); en tom streng <code>""</code> gir en tom-streng-celle (<code>COUNTA</code> teller den, <code>ISBLANK</code>=False).</dd>
+    <dt>Løsning</dt><dd>Bruk <code>Empty</code> for ikke-eksisterende svar/nøkler i UPSERT-skrivingen. Ikke-eksisterende nøkkel i innkommende data skal gi ekte tom celle, ikke tom streng; et tomt svar fra API-et (feltet finnes, men er blankt) blir tom streng.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A5)</p>
+</div>
+
+<div class="gotcha" id="g-ns-array-storrelse" data-cat="excel">
+  <h4>2D-array mindre enn målområdet fyller resten med #N/A</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>#N/A</code> dukker opp i celler som ikke skulle ha fått noen verdi.</dd>
+    <dt>Årsak</dt><dd>Skriver man <code>Range.Value = array</code> der arrayet er mindre enn målområdet, fyller Excel resten av området med <code>#N/A</code>.</dd>
+    <dt>Løsning</dt><dd>Skjær målområdet til NØYAKTIG array-størrelse før skriving. Ytelsesnotat i samme kategori: skriv én hel rad som ett 1xN-array-kall i stedet for celle-for-celle (<code>.Cells(r,c).Value = ...</code> er én COM-runde per celle og er tregt); v3.21.0 gikk over til ett Range-kall per rad.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A5; v3.21.0)</p>
+</div>
+
+<div class="gotcha" id="g-ns-formel-mot-manglende-tabell" data-cat="excel">
+  <h4>.Formula mot ikke-eksisterende tabell gir runtime 1004</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Runtime-feil 1004 ved setting av en formel som refererer en strukturert tabellreferanse.</dd>
+    <dt>Årsak</dt><dd><code>.Formula = "=SUM(NyTabell[Kol])"</code> satt FØR tabellen <code>NyTabell</code> faktisk finnes i arbeidsboken.</dd>
+    <dt>Løsning</dt><dd>Opprett tabellen (<code>ListObjects.Add</code> + navngiving) før noen formel som refererer den, settes.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A6)</p>
+</div>
+
+<div class="gotcha" id="g-ns-blaa-rad-kosmetisk" data-cat="excel">
+  <h4>Nye tabellrader kan bli ensfarget blå i stedet for stripet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Rader lagt til via <code>ListRows.Add</code> vises ensfarget blå, ikke i tabellens vanlige stripete stil.</dd>
+    <dt>Årsak</dt><dd>Ikke fastslått; kosmetisk formateringsavvik ved radtillegg.</dd>
+    <dt>Løsning</dt><dd>Uløst. Forsøk på å reassigne <code>TableStyle</code> for å fikse det gjorde det VERRE (v3.20.2); v3.20.3 gjorde derfor helsesjekken mer konservativ (reassigner ikke <code>TableStyle</code>, kan slå PÅ <code>ShowTableStyleRowStripes</code> men ikke mer). Kjent, akseptert avvik i v3.22.1.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A7; v3.20.2–v3.20.3)</p>
+</div>
+
+<div class="gotcha" id="g-ns-duplikate-kolonnenavn" data-cat="excel">
+  <h4>JSON-flatning: dedup av kolonnenavn må sjekkes mot en DELT liste, ikke per rad</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Dupliserte kolonner i tabellen; Excel gir dem stille auto-navn («kol», «kol2», «kol3» …) i stedet for én delt kolonne.</dd>
+    <dt>Årsak</dt><dd>«Har jeg sett denne kolonnen»-sjekken i <code>modJsonFlatten</code> sjekket feilaktig mot <code>TargetRow.Exists(key)</code> — en PER-RAD-ordbok, ny og tom for hver submission — i stedet for en delt «ColumnSeen»-ordbok for HELE hentingen. Samme feltnavn ble dermed lagt til på nytt for hver rad som hadde det feltet.</dd>
+    <dt>Løsning</dt><dd>Dedup må sjekkes mot en ordbok/liste som er DELT på tvers av alle rader i hele datasettet, aldri per-rad. Test flatningen med MINST to submissions med delvis overlappende felt (én test-rad avslører ikke bugen).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A8; feedback_vba_com_test_gotchas.md pkt. 2)</p>
+</div>
+
+<div class="gotcha" id="g-ns-header-omdop" data-cat="excel">
+  <h4>Trygg måte å endre kolonne-alias på: sett header-cellens Value</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Behov for å endre visningsnavn (alias) på en tabellkolonne uten å ødelegge strukturerte referanser andre steder i arbeidsboken.</dd>
+    <dt>Årsak</dt><dd>En naiv tilnærming (slette/gjenopprette kolonnen) ville brutt strukturerte referanser til den, på samme måte som Unlist/rebuild bryter kryss-ark-formler (se <a href="#g-ns-frosne-referanser">fallgruven om frosne referanser</a>).</dd>
+    <dt>Løsning</dt><dd>Sette <code>tbl.HeaderRowRange.Cells(1,c).Value</code> til det nye navnet OMDØPER selve <code>ListColumn</code>-objektet, og Excel oppdaterer automatisk alle strukturerte referanser til den. Dette er metoden UPSERT-skrivingen bruker for å synke header med registrert alias ved hver henting.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A9; UPSERT-arkitektur)</p>
+</div>
+
+<div class="gotcha" id="g-ns-skjulte-kolonner-nullstilt" data-cat="excel">
+  <h4>Skjulte kolonner nullstilles ved tabell-ombygging</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En kolonne Håkon har skjult (via kolonneinnstillinger) blir synlig igjen etter en henting.</dd>
+    <dt>Årsak</dt><dd>Kolonnesynlighet er en egenskap som ikke overlever ombygging/re-synkronisering av tabellstrukturen automatisk.</dd>
+    <dt>Løsning</dt><dd><code>ApplyColumnVisibility</code> kalles etter HVER henting for å reapplisere lagrede synlighetsinnstillinger fra <code>NettskjemaKolonner_Hidden</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A10)</p>
+</div>
+
+<div class="gotcha" id="g-ns-pq-refresh-fra-vba" data-cat="excel">
+  <h4>Oppdater Power Query-tilkoblinger fra VBA: bruk ikke RefreshAll</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Andre, urelaterte tilkoblinger i arbeidsboken blir også oppdatert (uønsket) når man bare ville friske opp Nettskjema-avledede spørringer.</dd>
+    <dt>Årsak</dt><dd><code>Application.CalculateFullRebuild</code>/<code>Workbook.RefreshAll</code> rører ALLE tilkoblinger i boken, ikke bare de aktuelle.</dd>
+    <dt>Løsning</dt><dd>Løkke selektivt: <code>For Each conn In ThisWorkbook.Connections</code>, filtrer på KUN OLEDB med <code>"Microsoft.Mashup.OleDb.1"</code>, sett <code>conn.OLEDBConnection.BackgroundQuery = False</code>, kall <code>conn.Refresh</code>, og til slutt <code>Application.CalculateUntilAsyncQueriesDone</code> for å vente til alt er ferdig. Brukt i Håkons egen <code>OppdaterNettskjema</code>-snarveimakro.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A11)</p>
+</div>
+
+<div class="gotcha" id="g-ns-pq-radhoyde" data-cat="excel">
+  <h4>Power Query nullstiller overskriftsradens høyde ved refresh</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Overskriftsraden på et Power Query-utdataark (f.eks. «Samlet nettskjema rapport») blir lavere enn ønsket etter hver oppdatering.</dd>
+    <dt>Årsak</dt><dd>Power Query gjenoppbygger utdataområdet ved hver refresh og nullstiller radhøyden til standard.</dd>
+    <dt>Løsning</dt><dd>Håkons <code>OppdaterNettskjema</code>-snarveimakro setter overskriftsradhøyde 26 KUN på <code>Nettskjemarunde1_tbl</code> på arket «Samlet nettskjema rapport» ETTER Power Query-refresh. Dette er bevisst det ENESTE stedet i hele verktøykjeden som rører rad-/kolonnehøyde eller -bredde.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A11; Håkons snarveimakro)</p>
+</div>
+
+<div class="gotcha" id="g-ns-static-worksheet" data-cat="excel">
+  <h4>Arksletting gir hengende COM-referanse i andre makroer med Static Worksheet-variabel</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Automation error: Exception occurred» ved <code>.Activate</code> på et Worksheet-objekt i en annen makro (konkret: Makromeny v2.2.1), som <code>On Error Resume Next</code> IKKE alltid fanger (feilen skjer på RPC-nivå).</dd>
+    <dt>Årsak</dt><dd>«Fjern tilkobling» i Nettskjema-henter sletter arket. En annen makro som holder en <code>Static</code> Worksheet-objektvariabel fra før slettingen, får en hengende/ugyldig COM-referanse.</dd>
+    <dt>Løsning</dt><dd>Lagre arknavnet som <code>String</code> i stedet for å holde på selve Worksheet-objektreferansen over tid, og slå opp arket på nytt (<code>Worksheets(navn)</code>) hver gang det trengs. Fikset i Makromeny v2.2.1.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A12; Makromeny v2.2.1)</p>
+</div>
+
+<div class="gotcha" id="g-ns-norsk-locale" data-cat="vba">
+  <h4>Norsk Excel: .Formula vs. .FormulaLocal, desimalkomma og lokaliserte dialoger</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Formler skrevet med engelsk syntaks virker ikke som forventet på norsk Excel; tall lest fra Excel via VBA blir feil størrelsesorden; forventet MsgBox-knappetekst finnes ikke.</dd>
+    <dt>Årsak</dt><dd><code>.Formula</code> forventer ALLTID engelsk syntaks (komma som listeskilletegn, <code>SUM</code>, <code>IF</code>) uansett Excel-språk; <code>.FormulaLocal</code> er norsk (semikolon, <code>HVIS</code>). Desimalkomma: et tall lest som TEKST fra VBA (f.eks. en <code>InsideWidth</code>-verdi «529,2») tolkes feil (529,2 → 5292) hvis det ikke parses med invariant kultur. MsgBox-knapper og feilmeldinger er lokalisert på norsk (f.eks. «&amp;Ja»/«OK»).</dd>
+    <dt>Løsning</dt><dd>Bruk <code>.Formula</code> (engelsk) konsekvent i kode som setter formler; bruk <code>InvariantCulture</code> ved parsing av tallverdier lest som tekst fra VBA i PowerShell; test dialogtekst-matching mot faktiske norske strenger, ikke antatte engelske.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md A13)</p>
+</div>
+
+<div class="gotcha" id="g-ns-type-reservert" data-cat="vba">
+  <h4>«Type» er reservert i VBA — kan ikke brukes som felt- eller parameternavn</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Compile error: Expected: identifier» — men KUN når koden faktisk kjøres/kompileres første gang, ikke ved <code>VBComponents.Import</code> (som bare limer inn tekst uten å kompilere).</dd>
+    <dt>Årsak</dt><dd><code>Type</code> er et VBA-statement-nøkkelord (brukt til å deklarere en <code>Type</code>-blokk), og kan derfor ikke gjenbrukes som identifikator — verken som feltnavn i en <code>Type</code>-blokk (her: Windows CREDENTIAL-struct) eller som parameternavn i en <code>Declare Function</code>. Andre «vanlige» ord (Name, Date, Comment m.fl.) fungerer fint som identifikatorer, så feilen er lett å overse.</dd>
+    <dt>Løsning</dt><dd>Bruk et annet navn (f.eks. <code>CredType</code>). Skann alltid nye <code>Type</code>-blokker og <code>Declare</code>-signaturer for VBA-nøkkelord (Type, Name, Date, Error, Object, Print, Let, Set osv.) brukt som felt-/parameternavn FØR første testkjøring — importen alene avslører det ikke.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B1; feedback_vba_com_test_gotchas.md pkt. 1)</p>
+</div>
+
+<div class="gotcha" id="g-ns-timeserial" data-cat="vba">
+  <h4>TimeSerial-tredjeparameter overflower ved store sekundverdier</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Runtime error 6: Overflow» ved beregning av token-utløpstid, konsekvent for ALLE tilkoblinger med EKTE credentials og ekte <code>expires_in</code> (86400 sek = 24 t).</dd>
+    <dt>Årsak</dt><dd><code>TimeSerial(0,0,x)</code> sitt tredje parameter er <code>Integer</code>-typet internt (maks 32767), selv om VBA ikke klager ved kompilering av store <code>Long</code>-verdier. <code>TimeSerial(0,0,86340)</code> overflower konkret. Falske-credentials-tester (som alltid feilet TIDLIGERE i kjeden, ved 401 <code>invalid_client</code>, før noen ekte <code>expires_in</code> ble mottatt) avslørte ALDRI dette — se <a href="#g-ns-tidlig-feil-bevis-ikke-suksess">fallgruven om at tidlig feil ikke beviser suksess-stien</a>.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>Now + CDbl(sek)/86400#</code> i stedet for <code>TimeSerial</code>/<code>DateSerial</code> for tidsintervaller som kan overskride ~32000, siden VBA Date-verdier er <code>Double</code> internt og ikke har denne begrensningen. Test alltid MINST én reell suksess-vei mot ekte server, ikke bare feilscenarioer.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B2; v2.3.1; feedback_vba_com_test_gotchas.md pkt. 5)</p>
+</div>
+
+<div class="gotcha" id="g-ns-err-nullstilt" data-cat="vba">
+  <h4>Enhver On Error-setning nullstiller Err — også On Error GoTo 0</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En feilhåndterer viser tom feilmelding («(tom feilmelding)») i stedet for den ekte <code>Err.Description</code>, synlig først i en samlet batch-oppsummering («Oppdater alle») der alle feilede tilkoblinger viste tomt.</dd>
+    <dt>Årsak</dt><dd>Dokumentert Microsoft-oppførsel: ETHVERT <code>On Error</code>-statement (også <code>On Error Resume Next</code> og <code>On Error GoTo 0</code>) nullstiller VBAs globale <code>Err</code>-objekt automatisk, selv om ingen ny feil faktisk oppstod. Konkret: <code>RefreshConnectionRow</code>s <code>ErrHandler:</code> kalte loggefunksjonen <code>LogEvent</code> FØR den leste <code>Err.Description</code>; <code>LogEvent</code> kaller internt <code>GetLogSheet()</code>, som selv bruker <code>On Error Resume Next</code>/<code>GoTo 0</code> (helt normalt mønster i seg selv) og dermed nullstilte det opprinnelige feilobjektet.</dd>
+    <dt>Løsning</dt><dd>I ENHVER <code>ErrHandler:</code>-blokk: les <code>Err.Number</code>/<code>Err.Description</code> inn i LOKALE variabler som det ALLERFØRSTE som skjer, før noe annet Sub/Function-kall (spesielt logging/hjelpefunksjoner som selv kan inneholde <code>On Error</code>). Bruk deretter kun de lokale variablene videre.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B3; v2.2.0; feedback_vba_com_test_gotchas.md pkt. 4)</p>
+</div>
+
+<div class="gotcha" id="g-ns-deklarasjon-etter-sub" data-cat="vba">
+  <h4>Moduldeklarasjoner må stå øverst, før alle Sub/Function</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Only comments may appear after End Sub».</dd>
+    <dt>Årsak</dt><dd><code>Dim</code>/<code>Const</code>/<code>Private</code>-deklarasjoner plassert ETTER en <code>Sub</code>/<code>Function</code> i samme modul.</dd>
+    <dt>Løsning</dt><dd>Alle moduldeklarasjoner skal stå øverst i modulen, før noen prosedyre.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B4)</p>
+</div>
+
+<div class="gotcha" id="g-ns-kompileringsfeil-blokkerer-alt" data-cat="vba">
+  <h4>Kompileringsfeil i ÉN modul blokkerer Application.Run for HELE prosjektet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Misvisende feilmelding «Kan ikke kjøre makroen ... eller at alle makroer er deaktivert» ved forsøk på å kjøre en makro som i seg selv er helt korrekt — ser ut som et makrosikkerhets-problem, men er en kompileringsfeil et annet sted i prosjektet.</dd>
+    <dt>Årsak</dt><dd>En kompileringsfeil i ÉN VBA-modul (f.eks. forårsaket av <a href="#g-ns-addfromstring-attribute-linje">en bokstavelig Attribute-linje via AddFromString</a>) hindrer VBA i å kompilere HELE prosjektet, og dermed <code>Application.Run</code> av ALLE makroer i det, ikke bare den feilende modulen.</dd>
+    <dt>Løsning</dt><dd>Ved denne typen misvisende feil: test først med en HELT tom modul (med og uten Attribute-linje) og et kall til en kjent-god makro, for å isolere om det er en ekte kompileringsfeil andre steder i prosjektet.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B5)</p>
+</div>
+
+<div class="gotcha" id="g-ns-addfromstring-attribute-linje" data-cat="vba">
+  <h4>AddFromString med bokstavelig Attribute VB_Name-linje ødelegger hele prosjektet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Samme misvisende feilbilde som <a href="#g-ns-kompileringsfeil-blokkerer-alt">kompileringsfeil blokkerer alt</a>: «Kan ikke kjøre makroen ...». Kan koste timer å spore, fordi symptomet også ligner makrosikkerhet eller en hengende VBE-dialog.</dd>
+    <dt>Årsak</dt><dd><code>CodeModule.AddFromString()</code> med en bokstavelig <code>Attribute VB_Name = "..."</code>-linje som FØRSTE linje i strengen. Attribute-linjen hører kun hjemme i <code>.bas</code>/<code>.frm</code>-filer brukt med <code>VBComponents.Import()</code>, ikke i tekst sendt til <code>AddFromString</code>.</dd>
+    <dt>Løsning</dt><dd>Ved <code>Add(1)</code> (ny modul) + <code>AddFromString</code>: sett komponentnavnet via <code>.Name</code>-egenskapen, og la selve kodestrengen starte direkte på <code>Option Explicit</code> (ingen Attribute-linje).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B6; feedback_vba_com_test_gotchas.md pkt. 11)</p>
+</div>
+
+<div class="gotcha" id="g-ns-listbox-click" data-cat="msforms">
+  <h4>MSForms ListBox: Click fyrer aldri — bruk MouseUp</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kode i <code>ListBox_Click</code>-hendelsen kjører aldri når brukeren klikker i listen.</dd>
+    <dt>Årsak</dt><dd>MSForms ListBox sitt <code>Click</code>-event fyrer ALDRI i praksis (samme mønster gjelder Kolonnevelgeren og Mail-utsenderen); <code>MouseDown</code>/<code>MouseUp</code> gjør derimot det.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>MouseUp(Button, Shift, X, Y)</code>. Avkrysningskolonnen er kolonne 0 (<code>X &lt; 24 pt</code>) med glyfene <code>ChrW(9744)</code>/<code>ChrW(9745)</code> og <code>ColumnWidths</code> satt til «24 pt;...». <code>Shift</code>-parameteret leses fra EKTE tastaturtilstand (kan derfor ikke simuleres via meldinger, se <a href="#t-ui-printwindow-postmessage">UI-testteknikken</a>). Sett ALDRI <code>.ListIndex</code> fra kode inni handleren (reentrans), og vis aldri MsgBox inni en musehendelse.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B7; frmNettskjemaKoblinger)</p>
+</div>
+
+<div class="gotcha" id="g-ns-msforms-font-designer" data-cat="msforms">
+  <h4>MSForms-kontroller bygget/endret via PowerShell: sett farge/skrift i Initialize, ikke Designer</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Fet skrift/skriftstørrelse satt via Designer-egenskaper fra PowerShell slår ikke pålitelig igjennom; <code>ListBox.Height</code> satt ved kjøring kan «hoppe tilbake».</dd>
+    <dt>Årsak</dt><dd>Designer-egenskaper satt programmatisk via PowerShell/COM er upålitelige for <code>Font.Bold</code>/<code>Font.Size</code>. <code>CommandButton.BackColor</code>/<code>ForeColor</code> derimot virker fint satt samme vei.</dd>
+    <dt>Løsning</dt><dd>Sett farge og fet skrift i VBA-kode i <code>UserForm_Initialize</code> (f.eks. en <code>StilKnapp</code>-hjelpefunksjon), ikke via Designer fra byggeskriptet. Kontroller lagt i en Frame legges til med <code>$frame.Controls.Add</code>. <code>ListBox.List = 2D-array</code> (0-basert) sammen med <code>ColumnCount</code>/<code>ColumnWidths</code> fungerer; ingen kolonneoverskrifter uten <code>RowSource</code> (bruk labels over i stedet) og ingen per-rad-farge. Sett <code>ListBox.Height</code> i selve designeren, ikke ved kjøretid.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B8)</p>
+</div>
+
+<div class="gotcha" id="g-ns-modal-unload-forelder" data-cat="msforms">
+  <h4>Modalt skjema oppå modalt skjema: Unload Me på forelder lukker begge</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Både barn- og foreldreskjema forsvinner når barnet skulle vært det eneste som lukkes.</dd>
+    <dt>Årsak</dt><dd>Når et barn-skjema (her: <code>frmKolonneInnstillinger</code> åpnet oppå <code>frmNettskjemaInnstillinger</code>) lukkes, returnerer koden til forelderens <code>Show</code>-kall. Konkret bug: <code>cmdKolonner_Click</code> kalte <code>Unload Me</code> på HOVEDMENYEN (ikke bare barnet) etter at barnets <code>Show</code> returnerte.</dd>
+    <dt>Løsning</dt><dd>Barn-skjema åpnes MODALT oppå forelderen og skal kun lukke SEG SELV, aldri kalle <code>Unload Me</code> på forelderen. Naviger tilbake til forelderen ved at barnets <code>Show</code>-kall rett og slett returnerer.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B9; frmKolonneInnstillinger)</p>
+</div>
+
+<div class="gotcha" id="g-ns-collection-new-delt-instans" data-cat="vba">
+  <h4>IIf evaluerer begge grener; Dim x As New Collection deler instans</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Uventet sideeffekt fra «den andre» IIf-grenen selv når den ikke skulle brukes; en Collection ser ut til å «huske» data mellom kall til samme Function.</dd>
+    <dt>Årsak</dt><dd><code>IIf</code> evaluerer BEGGE grener uansett hvilken som til slutt returneres (ikke lat evaluering som <code>If</code>). <code>Dim x As New Collection</code> deklarert i en Function gir én DELT auto-instansiert Collection som lever på tvers av kall, ikke en ny per kall.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>If/Else</code> i stedet for <code>IIf</code> når en gren har sideeffekter eller kan feile. Bruk alltid <code>Dim x As Collection</code> + eksplisitt <code>Set x = New Collection</code> for å garantere en fersk instans per kall.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md B10)</p>
+</div>

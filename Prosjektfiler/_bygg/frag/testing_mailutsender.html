@@ -1,0 +1,44 @@
+<div class="technique" id="t-com-bridge-tilstand">
+  <h4>Tilstand ut av et åpent skjema via Public Function + standardmodul-bro</h4>
+  <p>Ekstern <code>Application.Run</code>/<code>OnTime</code> støtter ikke punktum-syntaks mot et skjema (<code>Skjema.Metode</code> feiler med «Kan ikke kjøre makroen …», selv når skjemaets standardinstans allerede er lastet og synlig — se <a href="#g-application-run-form-method">gotcha-fila</a>). Løsningen brukt gjennomgående: en midlertidig <code>Public Function</code> på selve skjemaet som returnerer én semikolon-delt tekststreng med relevant tilstand (f.eks. bit-mønster av valgte rader, <code>.ListIndex</code>, kontrollhøyder), pluss en tynn bro-<code>Function</code> i en standardmodul (typisk <code>modGenerisk</code>) som kaller inn i skjemaet og videreformidler returverdien. Kalles utenfra med <code>$xl.Run("Test_LesX")</code>. Et modalt <code>.Show</code> blokkerer IKKE andre eksterne COM-kall inn i samme Excel-instans — meldingspumpen fortsetter å kjøre, så <code>OnTime</code> returnerer umiddelbart selv med et modalt skjema åpent. Fjern ALLE slike bro-funksjoner før endelig innsending av en kodeendring, hver runde, sammen med versjonsbump. ALDRI <code>MsgBox</code> i en mus-hendelse som diagnostikk — det kan korrumpere Windows' egen meldingskø (se <a href="#g-msgbox-in-mouse-handler">gotcha-fila</a>).</p>
+</div>
+
+<div class="technique" id="t-msgbox-breadcrumbs">
+  <h4>Nummererte MsgBox-brødsmuler for å lokalisere en stille feil</h4>
+  <p>For å finne EKSAKT hvor en stille feil oppstår (dvs. ingen feilmelding, bare feil oppførsel — som Unload-Me-navigasjonsbuggen): legg inn nummererte, midlertidige <code>MsgBox</code>-brødsmuler («[DIAGNOSE 1] …», «[DIAGNOSE 2] …» osv.) ved hvert steg i den mistenkte kodestien, og be Håkon rapportere NØYAKTIG hvilke han ser (og i hvilken rekkefølge). Dette er en billig og pålitelig teknikk som har pinnet ned minst én ellers vanskelig bug på én runde, etter flere runder ren kodegjennomgangs-gjetting (inkludert minst én rent feilaktig teori). <strong>Gjelder KUN utenfor mus-hendelser</strong> — inne i en mus-handler er selv én MsgBox risikabel (se <a href="#g-msgbox-in-mouse-handler">gotcha-fila</a>); der må man bruke <a href="#t-com-bridge-tilstand">COM-bro-teknikken</a> i stedet.</p>
+</div>
+
+<div class="technique" id="t-ekte-klikk-vaktet">
+  <h4>Ekte fysisk museklikk, kun med eksplisitt samtykke, med vakt</h4>
+  <p>Reservert for tilfeller der ALT annet (selvtester, PostMessage, COM-tilstandslesing) er uttømt, og brukeren selv eksplisitt ber om og samtykker til det, i én avgrenset økt. Fremgangsmåte: regn punkt→piksel-forholdet EMPIRISK for det aktuelle vinduet der og da (<code>GetClientRect</code>-piksler delt på <code>Me.InsideWidth</code>/<code>InsideHeight</code> i punkter — ikke en antatt fast DPI-konstant); <code>ClientToScreen</code> for å få skjermkoordinater; lagre gjeldende <code>GetCursorPos</code>; <code>SetForegroundWindow</code> (bekreft at det faktisk virket med <code>GetForegroundWindow</code> etterpå); flytt pekeren med <code>SetCursorPos</code> i to–tre steg; klikk med <code>mouse_event</code> (<code>MOUSEEVENTF_LEFTDOWN</code>/<code>_LEFTUP</code>, 100–150 ms mellomrom); Shift simuleres med <code>keybd_event VK_SHIFT</code> ved behov; gjenopprett pekeren til lagret posisjon UMIDDELBART etterpå. Verifiser resultatet med COM-avlesing (se <a href="#t-com-bridge-tilstand">tilstandsbroen</a>), ALDRI med et skjermbilde (se <a href="#g-aldri-skjermbilde-basert">personvernregelen</a>). Denne teknikken var det som til slutt avslørte at <code>ListBox.Click</code> aldri fyrer i det hele tatt — noe ingen selvtest kunne ha vist, siden en selvtest bare kaller handleren direkte og dermed aldri tester om selve hendelsen utløses av en ekte hendelse.</p>
+</div>
+
+<div class="technique" id="t-postmessage-begrensning">
+  <h4>PostMessage-begrensning: oppdaterer utvalg, men utløser ikke VBA-hendelser</h4>
+  <p><code>PostMessage(hwnd, WM_LBUTTONDOWN/UP, …)</code> sendt direkte til et skjemas HWND flytter/oppdaterer native ting som <code>.ListIndex</code> (fordi Windows' egen hit-testing prosesserer meldingen), men utløser IKKE de høyere-nivå VBA-hendelsene (som <code>Click</code>) som MSForms selv skal syntetisere fra de rå museklikkene. Denne teknikken ble derfor forkastet som utilstrekkelig for å teste VBA-klikklogikk — den kan bekrefte at hit-testing fungerer, men kan aldri bekrefte eller avkrefte at en hendelseshandler faktisk kjører. Bruk <a href="#t-ekte-klikk-vaktet">ekte museklikk</a> eller <a href="#t-selvtest-private-handlere">direkte selvtest av handleren</a> i stedet, avhengig av hva man faktisk trenger å bevise.</p>
+</div>
+
+<div class="technique" id="t-selvtest-private-handlere">
+  <h4>Selvtester som kaller private handlere direkte</h4>
+  <p>Å kalle en privat hendelseshandler direkte med kontrollerte parametre (f.eks. <code>lstMailer_MouseUp 1, 1, 5, 0</code>) via en midlertidig bro verifiserer at SELVE LOGIKKEN inni handleren er korrekt for gitte input — men beviser IKKE at den virkelige hendelsen faktisk utløser handleren under ekte bruk. Dette skillet var akkurat det som gjorde at Ctrl/Shift-avkrysningsbuggen kunne se «løst» ut i selvtester over flere forsøk, mens den fortsatt var reelt ødelagt for ekte klikk — avsløringen kom først ved <a href="#t-ekte-klikk-vaktet">ekte museklikk-testing</a>. Bruk selvtester for å verifisere LOGIKK raskt og trygt, men aldri som eneste bevis for at en interaktiv funksjon faktisk virker for en ekte bruker.</p>
+</div>
+
+<div class="technique" id="t-kompileringsfeil-ontime">
+  <h4>Tving frem VBA-kompilering via OnTime, se etter skjult VBE-dialog</h4>
+  <p>PowerShell-syntakssjekk (<code>[ScriptBlock]::Create</code>) validerer kun PowerShell-laget rundt en heredoc — den ser ALDRI inn i selve VBA-koden. VBA kompilerer først når koden faktisk kjøres. Etter hver installasjon: tving en reell kjøring (f.eks. ved å åpne et skjema via <code>Application.OnTime</code>) og se etter en skjult, bak-liggende kompileringsfeildialog («Microsoft Visual Basic for Applications», vindusklasse <code>#32770</code>) via <code>EnumWindows</code> filtrert på Excel-prosessens PID + UI Automation-tekstlesing, i stedet for å anta at fravær av en PowerShell-feil betyr at koden er korrekt.</p>
+</div>
+
+<div class="technique" id="t-testfil-fiktive-data">
+  <h4>Testfil med fiktive data der alle e-poster går til avsenderen selv</h4>
+  <p>Generelt mønster for trygg testing av et verktøy som faktisk kan sende e-post: en dedikert testarbeidsbok med oppdiktede firma-/personnavn og data, der HVER ENESTE rads e-postadresse peker til den som tester selv (ikke en fiktiv, men plausibel ekstern adresse) — dette gjør selv en ekte, utilsiktet <code>.Send()</code> trygt. Minst én rad bør bevisst ha et hull i dataene (f.eks. tom e-post) for å faktisk utløse og verifisere feilsjekk-/advarselslogikken, ikke bare lykkelig-vei-scenarioet. Se Mail-utsenders eget Testfil-oppsett for et konkret eksempel.</p>
+</div>
+
+<div class="technique" id="t-isolert-excel-instans">
+  <h4>Fullstendig separat Excel-instans for isolert testing</h4>
+  <p>Bruk <code>New-Object -ComObject Excel.Application</code> (ikke <code>GetActiveObject</code>) for alt annet enn det aller siste «installer i ekte målfil»-steget, spesifikt for å utelukke enhver mulighet for å krysse inn i brukerens allerede åpne, ekte arbeidsbok — se <a href="#g-shared-excel-instance">gotcha-fila</a> for hele resonnementet og en reell hendelse dette unngår.</p>
+</div>
+
+<div class="technique" id="t-standalone-string-sim">
+  <h4>Simuler fiddly strengmanipulasjon frittstående før den sendes til brukeren</h4>
+  <p>For sti-/strengfikser som er vanskelige å få riktig i ett forsøk (f.eks. VBAs <code>Mid</code>/<code>Left</code>/<code>Right</code>/<code>InStr</code>-logikk for å bygge en lokal filsti fra en sky-URL): reimplementer de eksakte samme kallene frittstående i PowerShell og kjør dem mot REELLE, observerte verdier — FØR en ny gjetning sendes til brukeren for enda en test-runde. Dette var det som til slutt fanget en feil et tidligere, plausibelt utseende forsøk hadde bommet på (se <a href="#g-onedrive-url-sti">OneDrive-sti-gotchaen</a>). Bruk ALDRI <code>Dir()</code> (eller annen kjent upålitelig filsystemfunksjon mot skysynkede stier) som dommer for om en slik fiks faktisk virket.</p>
+</div>

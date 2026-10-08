@@ -1,0 +1,62 @@
+
+  <h3 id="mac-kontaktsentralen-test">Testing av denne makroen</h3>
+  <div class="callout warn"><p><strong>Absolutt regel (Håkon, 11.09.2026, ordrett): «Du skal ikke lese personinfo fra excel som Claude. Aldri».</strong> Gjelder alle ekte data, både Excel <em>og</em> Outlook-postboks, ikke bare kontaktdata: også kolonneoverskrifter og config-verdier i den ekte fila. Ingen delegering til subagent (en subagent som leser den er fortsatt Claude som leser den; regelen ble gitt etter at en Explore-subagent ble startet for å inspisere tabellstruktur og skjult konfigark, og stoppet umiddelbart via TaskStop). Vil man vite noe om den ekte fila: spør Håkon. Skjermbilder han sender kan inneholde ekte data: ikke gjengi innholdet, og be ham dekke til navn/e-poster. Testfiler kun i Claudes scratchpad, aldri andre steder i OneDrive. Generelle teknikker er samlet i <a href="#t-kontaktsentralen-kompileringssjekk">testmetodeavsnittet</a>.</p></div>
+  <p>Arbeidsdeling: Claude verifiserer kompilering, logikk på oppdiktede data og layout; Håkon klikk-tester alt som berører ekte Outlook/ekte fil. Håkons klikk-testing har gjentatte ganger funnet ekte feil som automasjonen ikke fant (0.3.2 ByVal, 0.4.1 ReDim, 0.4.2 combo, 0.7.x tre kompileringsfeil, 0.7.x undermapper, 0.10.4 laptop-layout). Når Håkon har lite «usage» sier han «gjør kodingen uten for mye testing»; kompileringssjekk er likevel obligatorisk.</p>
+  <ol>
+    <li><strong>Kastefil med oppdiktede data</strong> i scratchpad: liten tabell <code>TestTabell</code> (SkoleID/Skolenavn/Epost/CC/Kontroll, oppdiktede rader; én rad i den første kastefila <code>kts-kastefil.xlsm</code>). Lages via <code>New-Object -ComObject Excel.Application</code> → <code>SaveAs</code> på <strong>kort sti</strong> (<code>%TEMP%\kts-kastefil.xlsm</code>) → <code>Move-Item</code> inn (MAX_PATH; se <a href="#g-saveas-maxpath">gotcha</a>). Lagre alltid med <code>SaveCopyAs</code>, aldri <code>Save</code>, og sjekk <code>FullName</code> (<a href="#g-save-flytter-onedrive">gotcha</a>). Én persistent kastefil gjenbrukes per byggefase (Håkons ønske 11.09.); ny bare ved korrupsjon eller når fersk-installasjon skal testes. Ved sesjonens slutt 21.09. slettet Claude testfil og skript etter Håkons ønske; neste gang: lag EN ny syntetisk fil (tabell + konfig), installer med <code>-NyExcelInstans</code>, gjenbruk i økten, og gjenskap kompileringssjekk-/input-hjelperne (metodene er beskrevet i testmetodeavsnittet).</li>
+    <li><strong>Installer med <code>-NyExcelInstans</code></strong> (egen Excel-prosess). Egen PID = prosesser etter minus før; bind med <code>[Marshal]::BindToMoniker(fil)</code>; verifiser at <code>$app.Workbooks</code> bare inneholder testfila før <code>Quit()</code>. <code>-Force</code> for å reinstallere samme versjon; lukk egen instans først (ellers åpner neste instans fila skrivebeskyttet). Se <a href="#g-installer-kobler-til-kjorende-excel">gotcha</a>.</li>
+    <li><strong>Kompileringssjekk</strong> etter hver endring (<code>CommandBars.FindControl(1, 578).Execute()</code>), inkl. negativ kontroll første gang. Beviser ikke fravær av kjøretidsfeil (ReDim-klassen).</li>
+    <li><strong>Kjøretid:</strong> vis det <em>ekte</em> skjemaet modeless (<code>frmX.Show 0</code>) fra en test-Sub i en midlertidig standardmodul; skriv resultater til celler (kolonne Z) og les dem ut. For privat hendelseslogikk: <strong>injiser offentlige <code>Test*</code>-wrappere</strong> i skjemaets <code>CodeModule</code> i testfila (forsvinner ved <code>-Force</code>-reinstall). Bruk <code>Application.Run "'fil.xlsm'!Prosedyre"</code>. Sub og resultatleser i samme <code>AddFromString</code>.</li>
+    <li><strong>Synlig layoutsjekk:</strong> <code>Application.Visible = $true</code> i <em>egen</em> instans, vis skjemaet, ta <code>PrintWindow(hwnd, hdc, 2)</code> av <code>ThunderDFrame</code>-vinduet (<code>SetProcessDPIAware()</code> først, ellers klippes bildet), les PNG-en. Bare med oppdiktede data. (Håkons personverndisiplin fra tidlig fase: unngå skjermbildebasert verifisering på flerskjerm-oppsettet og heller bruke tekstbasert UI-automasjon/tilgjengelighetstre der mulig; dette gjelder ekstra strengt for Kontaktsentralen.)</li>
+    <li><strong>Ekte input (tastatur/mus) mot egne skjemaer</strong> kun bak vakt: <code>SetForegroundWindow(mittSkjema)</code> + verifiser <code>GetForegroundWindow()</code> / <code>WindowFromPoint</code>-rotvindu = mitt skjema før <code>keybd_event</code>/<code>mouse_event</code>; gjenopprett markørposisjon. Vakten aborterer når Håkons eget vindu ligger oppå: da er han aktiv på skjermen; stopp eksperimenter. Postede/sendte <code>WM_KEYDOWN</code>/<code>WM_MOUSEWHEEL</code> til «F3 Server» når ikke MSForms-kontrollene.</li>
+    <li><strong>Test sammen med de andre makroenes installere</strong> (uten å røre Håkons Excel): kopier hver installer til scratchpad og bytt <code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code> med <code>throw 'x'</code> (de faller da til <code>New-Object -ComObject</code>). De lar sin Excel stå åpen; bind med <code>BindToMoniker</code>, <code>Save()</code> (kun scratchpad-fil) og <code>Quit()</code> før neste installer. Verifiser komponenter/knapper/ThisWorkbook-blokker etterpå (Claudes hjelper <code>kts-comp-list.ps1 -f &lt;fil&gt; [-Avslutt]</code> listet komponenter, ark, knapper og ThisWorkbook-blokker).</li>
+    <li><strong>Oppsett-vinduet</strong> (<code>frmKtsOppsett</code>) og alt som kaller <code>GetObject(, "Outlook.Application")</code> / lister <code>ns.Folders</code> vises <strong>ikke</strong> via automasjon (ville eksponert Håkons ekte mappenavn). Unntak brukt én gang: i testkopien ble de to Outlook-linjene erstattet med <code>Set olApp = Nothing</code> via <code>CodeModule.ReplaceLine</code> før skjemaet ble vist. Håkon tester Oppsett, Outlook-farger, skann og «Lagre i Outlook» selv (anbefal test på én testmail). Samme gjelder <code>frmKontaktsentralen</code> i 0.7.0-perioden (koblet til kjørende Outlook ved <code>UserForm_Initialize</code>).</li>
+    <li><strong>Arbeidsdeling</strong> som over.</li>
+    <li><strong>Opprydding:</strong> lukk bare egen Excel-PID; slett testfiler i scratchpad (Håkon ba om det 21.09.). <code>kts-test.pst</code> fra 11.09. ligger i scratchpad og er urørt: ukjent om den er koblet til Håkons Outlook, ikke slett blindt.</li>
+  </ol>
+  <h4>Hva som er verifisert per versjon og hva som ikke er</h4>
+  <ul>
+    <li><strong>0.3.1:</strong> kompilerer; installer/knapp/uninstall for 3 komponenter; <code>KjørSkann</code> IKKE integrasjonstestet (kunne ikke fabrikkere Outlook-elementer trygt; Håkons første «Skann nå» ble første ekte test).</li>
+    <li><strong>0.4.1:</strong> ekte kjøretidstest av <code>frmKontaktsentralen</code> via modeless <code>Show 0</code>.</li>
+    <li><strong>0.7.0:</strong> kategorisplitt, e-postmatching og <code>.Add</code>-dictionary-verdi bekreftet med rene, isolerte <code>Application.Run</code>-tester; <code>KtsByggRadliste</code>-sortering og <code>KtsRadNavnForVisning</code> testet ved å vise <code>frmKtsRad</code>/<code>frmKtsUavklart</code> modeless. <strong>Ikke</strong> et rent automatisert ende-til-ende-gjennomløp av selve <code>KtsLagreCache</code>/<code>KtsLastCache</code> (testøkten var degradert etter dusinvis av <code>AddFromString</code>/<code>DeleteLines</code>-runder; isolerte gjenoppbygginger av identisk logikk kjørte riktig; antatt sesjonsartefakt, sannsynligvis egentlig kompileringsfeil, se <a href="#g-ustabile-application-run">gotcha</a>). <code>frmKtsOppsett</code> og <code>frmKontaktsentralen</code> bevisst ikke vist via automasjon.</li>
+    <li><strong>0.8.0:</strong> kompilert og funksjonstestet på kastefil; Oppsett ikke vist.</li>
+    <li><strong>0.8.2:</strong> syntetiske data: kompilerer rent; knappenes rekkefølge/farger/dirty-tilstand/lagringsrekkefølge; cache + Kontrollkolonne-oppdatering (inkl. grå fallback); skjermbilder av radside og dashbord viste at alt passer. Utestet: skriving til Outlook, fargelesing, Innstillinger.</li>
+    <li><strong>0.9.0:</strong> syntetiske data; tastaturnavigasjon verifisert med ekte tastetrykk; musehjul verifisert som ikke-fungerende (postet <code>WM_MOUSEWHEEL</code> og ekte hjulsteg flytter ikke ScrollBar).</li>
+    <li><strong>0.10.0–0.10.5:</strong> syntetiske data/kompileringssjekk/skjermbilde ved Claudes DPI; ikke bekreftet av Håkon.</li>
+  </ul>
+
+  <h3 id="mac-kontaktsentralen-apent">Åpne punkter, begrensninger og idéer</h3>
+  <h4>Ikke bekreftet av Håkon på ekte data (0.10.0–0.10.5)</h4>
+  <ul>
+    <li><strong>Migrering av gammel cache</strong> bruker radposisjonene som ligger der <em>nå</em>. Har Håkon sortert tabellen siden forrige skann, kan enkelte e-poster få feil rad ved første åpning av 0.10.x. Tilbudt men <strong>ikke bygget:</strong> en «nullstill koblinger»-knapp. Etter oppdatering bør Håkon sjekke «Vis uavklarte»; mange treff = radnøkkelen har tomme/like verdier.</li>
+    <li><strong>Skriving av kategorier til Outlook</strong> (0.8.2) og <strong>lesing av kategorifarger</strong> er kun testet på oppdiktede data / ikke automatisert; Innstillinger er aldri vist via automasjon.</li>
+    <li><strong>Blinkende rullefelt (0.10.1)</strong> og <strong>uavklart-vinduets layout på laptop (0.10.5)</strong> avventer Håkons tilbakemelding.</li>
+    <li>Om <code>MIN_MAKRO_VERSION</code> kreves av nyere EMI: ukjent (se arkitektur).</li>
+  </ul>
+  <h4>Kjente begrensninger</h4>
+  <ul>
+    <li>Musehjulet virker ikke i den egenbygde lista (<a href="#g-musehjul-msforms">gotcha</a>). Kompensasjon: søkefelt + tastatur.</li>
+    <li>Blandet DPI forskyver windowless kontroller (<a href="#g-blandet-dpi">gotcha</a>); gjelder sannsynligvis også de andre skjemaene på laptopen, men de er ikke rapportert ødelagte.</li>
+    <li>Maks 30 kategoriknapper på radsiden (pool); flere vises ikke. Bare 11 rader synlige om gangen i dashbordet.</li>
+    <li>Kontrollkolonnen tømmes og skrives på nytt ved hver skann (Håkon advart mot egne notater der).</li>
+    <li>Gjenkjenningskolonner matcher hele celleverdien som én streng (e-postkolonner splittes på <code>,</code>/<code>;</code>, men gjenkjenning gjør det ikke). Flere alternative verdier i én celle er ikke støttet; ville kreve at cellen splittes på komma/semikolon og hver del testes. Ikke etterspurt ennå. Per-rad-unntak løses ved ekstra kolonne.</li>
+    <li>Cachen vokser (kun uavklarte som ikke lenger sees i postboksen fjernes). Ingen skann-logg/diagnostikk utover tellerne i meldingsboksen.</li>
+    <li>Cachen (emne/avsender/tidspunkt) følger med arbeidsboka ved deling.</li>
+    <li>Installeren kan i sjeldne tilfeller feile på <code>OnAction</code> rett etter import: re-kjør (<a href="#g-onaction-0x800a03ec">gotcha</a>).</li>
+    <li>Innstillinger-vinduet og alle Outlook-berørende funksjoner er aldri automatisk testet.</li>
+    <li>Kategorilistehåndtering avhenger av at postboksen heter «Inbox» (engelsk) under den delte postboksen (valgfritt navn, satt opp av brukeren i Oppsett) (prøver «Innboks» og «Inbox»).</li>
+  </ul>
+  <h4>Idéer til neste versjon</h4>
+  <ul>
+    <li>Nullstill-koblinger-knapp.</li>
+    <li>Filter på kategori/status i dashbordet.</li>
+    <li>Eksport/«purreliste» av rader uten svar.</li>
+    <li>Sorteringsvalg.</li>
+    <li>Bedre skann-logg/diagnostikk.</li>
+    <li>Hjul-mottaker via skjult fokusert ComboBox/ListBox (uprøvd).</li>
+    <li>Oppdatere layout for alle skjemaer slik at de tåler blandet DPI.</li>
+    <li>Fjerne arvenavnet <code>KTS_KOL_RESPONS</code> (= Kontrollkolonne) ved en senere opprydding.</li>
+    <li>Ta stilling til en <code>MIN_MAKRO_VERSION</code>-mekanisme dersom EMI krever den.</li>
+  </ul>
+  <div class="callout note"><p>Koordinering: flere parallelle Claude-sessions koordineres av «Kjetil» (sesjonen som mottok overleveringen). Alle macro-sessions legges ned og mappene under den gamle, nå avviklede prosjektstrukturen slettes; mappen for Excel Kontaktsentralen der er tom og kan slettes uten tap. Slett aldri <code>Digitale verktøy</code>. Det finnes ingen README/txt/logg-filer i prosjektmappa. Claude-minnefilene (byggelogg <code>project_kontaktsentralen_design.md</code>, ca. 55 KB, og <code>feedback_com_testing_environment_quirks.md</code>, ca. 23 KB) lå i den nå avviklede sessionens minnemappe (under den gamle, prosjektspesifikke mappestrukturen for Excel Kontaktsentralen); innholdet er nå destillert her.</p></div>
+</section>

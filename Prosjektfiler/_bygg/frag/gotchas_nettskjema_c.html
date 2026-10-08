@@ -1,0 +1,149 @@
+<div class="gotcha" id="g-ns-kolonne-for-smal" data-cat="excel">
+  <h4>Log-datoer vises som ##### når kolonnen er for smal</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Tidspunkt-kolonnen i Log-arket viser <code>#####</code> i stedet for datoen. Håkon rapporterte dette først som «alle får overflow», noe som senere viste seg å være denne visningsfeilen, IKKE den senere ekte Overflow-runtime-feilen (se <a href="#g-ns-timeserial">TimeSerial-fallgruven</a>) — to ulike ting med et overlappende ord i beskrivelsen.</dd>
+    <dt>Årsak</dt><dd>Kolonnebredden i Log-arket er for smal til å vise hele dato/klokkeslett-verdien; Excel viser da <code>#####</code> i stedet for å klippe innholdet.</dd>
+    <dt>Løsning</dt><dd><code>LogEvent</code> kjører <code>Columns.AutoFit</code> ved HVER loggrad som skrives (v2.2.1), slik at kolonnebredden alltid justeres til innholdet.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md, Log-arkbeskrivelse; v2.2.1)</p>
+</div>
+
+<div class="gotcha" id="g-ns-ps-bom" data-cat="encoding">
+  <h4>PowerShell 5.1 leser .ps1 uten BOM som ANSI — mojibake i konsoll OG i importert VBA</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Alle æøå-tegn ble mojibake (f.eks. «å» → «Ã¥») BÅDE i konsoll-output OG i selve VBA-koden som ble importert i Excel — bekreftet ved å lese den FAKTISK importerte komponenten med <code>CodeModule.Find</code>, ikke bare visuelt i konsollen.</dd>
+    <dt>Årsak</dt><dd>Windows PowerShell 5.1 (<code>powershell.exe</code>, IKKE <code>pwsh.exe</code>) kjørt via <code>-File</code> leser en .ps1-fil SOM ANSI (system-kodeside) hvis fila mangler UTF-8 BOM — selv om fila faktisk ER gyldig UTF-8. Skjedde etter at fila ble lagret UTEN BOM (<code>New-Object System.Text.UTF8Encoding($false)</code>, en vanlig «ren» konvensjon som er FEIL her).</dd>
+    <dt>Løsning</dt><dd>Lagre .ps1-filen MED BOM (<code>New-Object System.Text.UTF8Encoding($true)</code>). Verifiser: de tre første byte skal være 239 187 191 (<code>[System.IO.File]::ReadAllBytes($path)[0..2]</code>), OG les den faktisk installerte VBA-komponenten med <code>CodeModule.Find</code> (konsoll-encoding og fil-lesing er to atskilte ting som kan feile uavhengig av hverandre). Filen bruker LF, ikke CRLF; søk/erstatt-skript må bruke <code>`n</code>. Gjelder ENHVER .ps1 med ekte æøå direkte i selve PowerShell-kildekoden.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D1; feedback_vba_com_test_gotchas.md pkt. 10)</p>
+</div>
+
+<div class="gotcha" id="g-ns-herestring-terminator" data-cat="powershell">
+  <h4>Here-string-terminator '@ må stå først på linjen</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En here-string avsluttes uventet midt i VBA-koden den skal inneholde.</dd>
+    <dt>Årsak</dt><dd>PowerShells here-string-terminator <code>'@</code> må stå FØRST på linja for å telle. En VBA-kommentar i den innebygde koden som begynner med <code>'@</code> (kommentartegn + at-tegn) ville dermed avslutte here-strengen for tidlig. Filen bruker LF, ikke CRLF.</dd>
+    <dt>Løsning</dt><dd>Unngå VBA-kommentarer som starter med <code>'@</code> først på linjen inni here-strings; søke/erstatt-skript mot fila må bruke <code>`n</code> som linjeskift, ikke <code>`r`n</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D2)</p>
+</div>
+
+<div class="gotcha" id="g-ns-versjon-lik-hopper-over" data-cat="installer">
+  <h4>Installer hopper over installasjon hvis versjonsmarkøren er lik — feilsøkingsfelle</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En korrupt/feil modul lagret under samme versjonsnummer «henger igjen»; en fersk installasjon later til ikke å hjelpe.</dd>
+    <dt>Årsak</dt><dd>Installeren sjekker versjonskonstanten <code>NETTSKJEMA_HENTER_VERSION</code> og hopper over installasjon hvis den er LIK i mål-filen. Hvis en korrupt modul ble lagret under samme versjon som skulle vært installert, later installeren til å ikke gjøre noe.</dd>
+    <dt>Løsning</dt><dd>Bump versjonsnummeret (økes ved ENHVER kodeendring) eller kjør <code>-Uninstall</code> først for å tvinge en ny, fullstendig installasjon.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D3)</p>
+</div>
+
+<div class="gotcha" id="g-ns-adhoc-uttrekk-test" data-cat="testing">
+  <h4>Test alltid via selve installeren — aldri via hjemmelaget kodeuttrekk</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>modJsonFlatten</code> ble ødelagt OG versjonsmarkøren ble bumpet i samme lagring, uten at den egentlige installeren noensinne kjørte korrekt.</dd>
+    <dt>Årsak</dt><dd>En snarvei i test-harnessen brukte regex-uttrekk av here-string-innhold direkte i stedet for å kjøre selve installer-flyten, og dette uttrekket var feil.</dd>
+    <dt>Løsning</dt><dd>Test ALLTID via selve installer-scriptet, aldri via en hjemmelaget/forenklet uttrekksmekanisme som later som om den gjør det samme.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D4)</p>
+</div>
+
+<div class="gotcha" id="g-ns-getactiveobject-hvilken-som-helst" data-cat="com">
+  <h4>GetActiveObject binder til HVILKEN SOM HELST kjørende Excel — kan kollidere med andre sesjoner</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Installeren åpner/manipulerer feil fil (en annen sesjons eller Håkons LEVENDE Hovedarbeidsboken) i stedet for egen testkopi; eller: to samtidige automatiserte COM-kall kolliderer med feilkode <code>0x800AC472</code> (Excel opptatt/avviste kallet), observert konkret midt i en <code>.Visible = $true</code>-tilordning da to Claude-sesjoner («denne» og «Macro Maker: Formateringskontroll») kjørte automatisert Excel-testing samtidig.</dd>
+    <dt>Årsak</dt><dd><code>GetActiveObject("Excel.Application")</code> binder til HVILKEN SOM HELST allerede kjørende, registrert Excel-instans — den skiller IKKE mellom «min egen testfil» og en annen prosess/sesjons fil.</dd>
+    <dt>Løsning</dt><dd>Ved fare for kollisjon (annen sesjon kjører Excel, sjekk <code>Get-Process EXCEL | Select Id,MainWindowTitle</code> eller <code>Get-CimInstance Win32_Process</code> og match vindutittel mot EGEN testfil FØR noen handling): bruk en testkopi av installeren der <code>GetActiveObject</code>-blokken er byttet med <code>$excel = $null</code> (tvinger <code>New-Object -ComObject Excel.Application</code>, garantert egen isolert prosess, litt tregere men null kollisjonsrisiko). Drep/lukk aldri en prosess uten at tittel/PID bekrefter at det er egen testinstans.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D5; feedback_vba_com_test_gotchas.md pkt. 3 og 13)</p>
+</div>
+
+<div class="gotcha" id="g-ns-fullname-onedrive-url" data-cat="com">
+  <h4>Workbooks.FullName er en https-URL for OneDrive/SharePoint-synkede filer</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Sammenligning av <code>Workbooks.FullName</code> mot en forventet lokal filsti feiler for filer som ligger i en synket OneDrive/SharePoint-mappe.</dd>
+    <dt>Årsak</dt><dd>For OneDrive/SharePoint-synkede filer returnerer <code>FullName</code> (og ROT-visningsnavnet) en <code>https://</code>-URL i stedet for den lokale stien.</dd>
+    <dt>Løsning</dt><dd>Match på FULL LOKAL STI for lokale testfiler, og på URL-form for SharePoint-filer — ikke anta at det ene formatet alltid gjelder. Se også <a href="#g-ns-manuell-com-uten-save">ROT-basert tilkobling til allerede åpen fil</a> som denne mismatchen kan motivere.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D6)</p>
+</div>
+
+<div class="gotcha" id="g-ns-vbproject-tillit" data-cat="installer">
+  <h4>Installasjon krever «Klarer tilgang til VBA-prosjektobjektmodellen»</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Installeren kan ikke lese/skrive VBA-komponenter i målfilen.</dd>
+    <dt>Årsak</dt><dd>Tilgang til <code>VBProject</code> via COM krever at innstillingen «Klarer tilgang til VBA-prosjektobjektmodellen» er aktivert i Klareringssenteret (Trust Center) for den aktuelle Excel-installasjonen.</dd>
+    <dt>Løsning</dt><dd>Sjekk/aktiver denne innstillingen manuelt før installasjon forsøkes; installeren selv sjekker for dette tidlig i installflyten.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D7)</p>
+</div>
+
+<div class="gotcha" id="g-ns-tom-komponent" data-cat="installer">
+  <h4>Versjonssjekk krasjer hvis en komponent finnes men er tom (0 linjer)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Invalid procedure call or argument» ved installerens versjonssjekk.</dd>
+    <dt>Årsak</dt><dd>Versjonssjekken bruker <code>CodeModule.Lines(1, CountOfLines)</code> for å lese versjonskonstanten via regex. <code>.Lines(1, 0)</code> er ugyldig syntaks i VBA CodeModule-APIet, og dette skjer hvis en komponent FINNES i prosjektet men er TOM (0 linjer) — en tilstand som konkret oppsto etter et Excel-krasj rett etter ad-hoc COM-manipulasjon uten påfølgende lagring (se <a href="#g-ns-manuell-com-uten-save">den fallgruven</a>).</dd>
+    <dt>Løsning</dt><dd>Sjekk <code>CountOfLines &gt; 0</code> FØR <code>.Lines()</code> kalles. En tom-men-eksisterende komponent behandles som om den ikke fantes i det hele tatt: fjernes, en fersk versjon importeres, knapp legges til på nytt — samme vei som en helt ny installasjon.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D9-relatert; feedback_vba_com_test_gotchas.md pkt. 9)</p>
+</div>
+
+<div class="gotcha" id="g-ns-vbe-dialog-henger" data-cat="com">
+  <h4>En VBE-feildialog i automatisert instans HENGER alle COM-kall</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>Excel.Run(...)</code> (eller <code>$excel.Run(...)</code>) returnerer aldri; tidsavbrudd. Vindutittel viser «Microsoft Visual Basic for Applications» (VBE i forgrunnen) eller senere «Fil - Excel [break]».</dd>
+    <dt>Årsak</dt><dd>Koden traff en kompilerings- eller kjøretidsfeil, og VBA-editoren åpnet en feildialog som venter på brukerinput som aldri kommer i en hodeløs/automatisert kjøring. <code>try/finally</code> i PowerShell hjelper ikke, siden selve COM-kallet aldri returnerer. <code>Excel.Quit</code> avslutter ikke prosessen så lenge dialogen står åpen.</dd>
+    <dt>Løsning</dt><dd>Se den dedikerte, verifiserte gjenopprettingsprosedyren i <a href="#t-vbe-dialog-gjenoppretting">testteknikk-fragmentet</a>: (1) bekreft egen prosess (tittel/PID/StartTime), (2) les dialogteksten UTEN skjermbilde (UI Automation/EnumWindows), (3) trykk riktig knapp trygt, (4) lukk arbeidsboken uten lagring eller avslutt prosessen KUN på bekreftet egen PID.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D8; fallgruve_vba_debug_dialog_henger_test.md)</p>
+</div>
+
+<div class="gotcha" id="g-ns-manuell-com-uten-save" data-cat="com">
+  <h4>Manuell VBA-manipulasjon utenfor installeren må etterfølges av $wb.Save()</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Alt manuelt installasjonsarbeid forsvant sporløst etter en Excel-instabilitet/krasj under en påfølgende automatisert test; filen falt tilbake til sist lagrede (eldre) tilstand. I ett konkret tilfelle endte en komponent (<code>modNettskjema</code>) opp TOM (0 linjer) etter krasjet — en tilstand AutoSave i tillegg persisterte til disk, noe som avslørte <a href="#g-ns-tom-komponent">en ekte robusthetsbug i installeren</a>.</dd>
+    <dt>Årsak</dt><dd>Ad-hoc VBA-komponent-manipulasjon utenfor det offisielle, selv-lagrende installer-scriptet (f.eks. en ROT-basert (<code>IRunningObjectTable</code>, .NET-interop) teknikk for å hente en presis referanse til en allerede åpen arbeidsbok — nødvendig pga. <a href="#g-ns-fullname-onedrive-url">OneDrive/SharePoint-URL-vs-lokal-sti-mismatch</a>) er IKKE persistert før eksplisitt lagring.</dd>
+    <dt>Løsning</dt><dd>Kall <code>$wb.Save()</code> FØR man går videre til neste test-steg etter ENHVER manuell/ad-hoc COM-manipulasjon av VBA-prosjektet, spesielt før noe som kan krasje (kjøring av ny/uprøvd VBA-kode).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D9; feedback_vba_com_test_gotchas.md pkt. 8)</p>
+</div>
+
+<div class="gotcha" id="g-ns-application-run-modal-blokkering" data-cat="com">
+  <h4>Application.Run støtter ikke «Skjema.Metode»; modale skjema kan blokkere eksterne COM-kall</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Forsøk på å kalle en UserForm-metode direkte via <code>Application.Run("Skjema.Metode")</code> feiler. Et blokkerende kall (åpner et modalt skjema eller MsgBox) fra en ekstern COM-klient henger den kallende prosessen.</dd>
+    <dt>Årsak</dt><dd><code>Application.Run</code> kan ikke adressere en UserForm-metode direkte. Et modalt skjema blokkerer IKKE andre <code>Application.Run</code>-kall fra en ANNEN ekstern COM-klient/prosess, men et enkelt blokkerende kall i SAMME prosess/skript venter til skjemaet lukkes.</dd>
+    <dt>Løsning</dt><dd>Bruk en <code>Public Sub</code>/<code>Function</code> i en standardmodul som BRO til skjema-metoder. Kjør blokkerende kall (som åpner modalt skjema/MsgBox) i en EGEN bakgrunnsprosess (<code>Start-Process powershell -File bridge.ps1</code>) slik at det testende hovedskriptet kan fortsette å polle/interagere.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D10)</p>
+</div>
+
+<div class="gotcha" id="g-ns-onedrive-las" data-cat="installer">
+  <h4>OneDrive-lås kan gi «Ingen tilgang til filen» etter krasj, selv uten Excel-prosess</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Filen kan ikke åpnes/skrives, med feilmelding om manglende tilgang, selv om <code>Get-Process EXCEL</code> ikke viser noen kjørende prosess.</dd>
+    <dt>Årsak</dt><dd>OneDrive kan beholde en synkroniseringslås på filen en stund etter et Excel-krasj, uavhengig av om Excel-prosessen faktisk lever.</dd>
+    <dt>Løsning</dt><dd>Vent; ikke hamre på gjentatte åpne-forsøk. Prøv igjen etter en kort pause i stedet for å anta en dypere feil.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D11)</p>
+</div>
+
+<div class="gotcha" id="g-ns-bash-fallgruver" data-cat="powershell">
+  <h4>Bash-fallgruver ved kjøring/verifisering av PowerShell-installeren</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Installeren ser ut til å avbrytes midt i uten klar årsak; en linjeavslutnings-sjekk gir feil (tomt) resultat; store innebygde skript feiler med «unexpected EOF».</dd>
+    <dt>Årsak</dt><dd><code>powershell ... | head -N</code> kan avbryte installeren midt i kjøringen via SIGPIPE. <code>grep -c $'\r'</code> kan gi et tomt mønster og dermed telle ALLE linjer feilaktig (fremstår som at CRLF ikke finnes). Store heredocs med mange sitattegn i bash-verktøyet kan gi «unexpected EOF».</dd>
+    <dt>Løsning</dt><dd>Omdiriger installer-output til fil og verifiser komponentlisten i etterkant i stedet for å pipe til <code>head</code>. Bruk <code>od -c</code> for å sjekke faktiske linjeavslutninger i stedet for <code>grep -c</code> med <code>\r</code>. Skriv store innebygde skript til fil med Write-verktøyet i stedet for store heredocs i bash.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D12; feedback_vba_com_test_gotchas.md pkt. 14)</p>
+</div>
+
+<div class="gotcha" id="g-ns-tidlig-feil-bevis-ikke-suksess" data-cat="testing">
+  <h4>En test som feiler TIDLIG i en kjede beviser ikke at koden ETTER det steget fungerer</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Falsk trygghetsfølelse: «testet feilhåndtering mot ekte server» ble forvekslet med «testet suksess-stien mot ekte server». Konkret: falske-credentials-tester feilet ALLTID tidlig (401 <code>invalid_client</code>) og testet dermed aldri koden som kjørte ETTER et vellykket autentiseringssteg — noe som skjulte <a href="#g-ns-timeserial">TimeSerial-Overflow-bugen</a> i lang tid.</dd>
+    <dt>Årsak</dt><dd>Nettverks-/COM-tester som feiler tidlig (f.eks. tom eller falsk secret som gir 401 FØR noe nettverkskall) verifiserer kun feilhåndteringsveien, aldri de senere trinnene i en ekte, vellykket kjede.</dd>
+    <dt>Løsning</dt><dd>Ved testing mot en ekte ekstern API: sørg for MINST ett scenario som faktisk LYKKES helt til slutten, ikke bare kontrollerte feilscenarioer, før noe merkes som «verifisert mot ekte server». Tom/falsk secret er samtidig nyttig nettopp FORDI den feiler trygt uten nettverkskall — bruk den bevisst til trygg UI-testing (se <a href="#t-sikkerhetsregler">sikkerhetsregler</a>), ikke som bevis på at suksess-stien virker.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md D14; feedback_vba_com_test_gotchas.md pkt. 5)</p>
+</div>

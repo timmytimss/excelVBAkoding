@@ -1,0 +1,59 @@
+<section class="macro" id="mac-emi" data-nav="Hovedprosjekt|Excel Macro Installer (EMI)" data-title="Excel Macro Installer (EMI)" data-status="I drift · v2.4.8.0">
+  <h2>Excel Macro Installer (EMI)</h2>
+  <p class="lead">Sentralt, kompilert WinForms-program («Excel Macro Installer.exe») som installerer/oppdaterer/avinstallerer alle Excel-makroene fra ett sted i stedet for at Håkon må finne og dobbeltklikke hver enkelt <code>.ps1</code>-fil selv — hovedprosjektet som alle de andre makroene (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter, Makromeny, …) plugger seg inn i som moduler under <code>Macros\</code>.</p>
+  <dl class="facts">
+    <dt>Versjon</dt><dd><code>$LauncherVersion</code> = «2.4.8.0» (I drift), kompilert 2026-09-15 14:26. Baket inn i kildekoden (linje 59 i skrivende stund) og sammenlignet ved oppstart mot <code>.exe</code>-fila på disk for selvoppdateringsvarselet (se arkitektur-avsnittet). 2.4.7.0 kom fra en annen session; INGEN kilde vet nøyaktig hva som ble endret der (se åpne punkter).</dd>
+    <dt>Kilde</dt><dd>Kildekode: <code>Installer\Excel Macro Installer.ps1</code> (59 116 B) — rediger her, ALDRI i <code>.exe</code>-en direkte. Kompilert til <code>Excel Macro Installer.exe</code> (363 520 B) i mappa rett over <code>Installer\</code>. Ikonbygger: <code>Installer\Bygg-Ikoner.ps1</code> (10 026 B, lagt inn 2026-09-21). Full mappesti i neste avsnitt.</dd>
+    <dt>VBA-komponenter</dt><dd>Ingen egne — EMI selv er rent PowerShell/WinForms (ps2exe-kompilert), ikke VBA. Det er plugin-makroene i <code>Macros\</code> (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter, Makromeny) som hver har sine egne VBA-komponenter, dokumentert i sine respektive makro-fragmenter.</dd>
+    <dt>EMI-ikon/farge</dt><dd>Hovedikon <code>Resources\icon.ico</code> (270 398 B, multi-size, exe-/vindusikon): fersken/rust-gradient med et «pil inn i brett»-motiv, bygget for hånd separat fra de fem PNG-baserte ikonene og har derfor en annen stil. Per-makro-ikoner <code>icon-&lt;makro&gt;.ico</code> (5 stk, 67 646 B hver, 128×128, 32bpp) vises i appen inni en avrundet, fargede «plate» — se ikonsystem-avsnittet for paletten (<code>$script:IkonBakgrunner</code>/<code>IkonBakgrunnPerMakro</code>).</dd>
+  </dl>
+
+  <h3 id="mac-emi-bruk">Formål og bruk</h3>
+  <p>EMI er det ene stedet Håkon dobbeltklikker (eller trykker på en snarvei festet til oppgavelinjen) for å installere, oppdatere eller avinstallere en hvilken som helst av makroene på en hvilken som helst Excel-fil. Programmet forblir åpent og brukbart mens en valgt makro-installasjon kjører i sitt eget vindu (asynkront, se knapplogikk under), slik at flere makroer/filer kan installeres etter hverandre uten å vente.</p>
+
+  <h4>Mappestruktur</h4>
+  <div class="callout note"><p><strong>Kopiert til ny plassering (2026-09-22), gammel kopi beholdt som sikkerhetsnett.</strong> EMI finnes nå både på ny plass: <code>Claude (nettbasert)\Excel VBA Koding\Excel Macro Installer\</code> (byte-for-byte verifisert kopi, testet til å åpne rent) og fortsatt urørt på sin opprinnelige plassering: <code>Digitale verktøy\Excel Macro Installer\</code>. Kopieringen ble gjort som en ren fil-for-fil-kopi (ikke <code>Move-Item</code> på hele katalogen) nettopp for å unngå <a href="#g-emi-f2-katalog-i-bruk-flytting">gotchaen om katalog-flytting</a>. Se <a href="#ref-migrering">Migrering</a> for hva som gjenstår før den gamle kopien kan slettes (Håkons egen bruk-og-bekreft, ny snarvei til oppgavelinjen — snarveier kan ikke trygt oppdateres fra et script). README.md fra <code>Guides\</code> er borte (mappen er slettet, innholdet ligger nå i <a href="#ref-guides">Brukerveiledninger</a>) — eldre minnenotater andre steder kan fortsatt nevne den gamle stien.</p></div>
+  <p>Fullstendig, faktisk innhold i mappa per 2026-09-21 (byte-tall og datoer som observert, kan avvike marginalt fra en fersk visning):</p>
+  <pre><code>Excel Macro Installer\
+├── Excel Macro Installer.exe            (363 520 B, v2.4.8.0, 09-15 14:26 — det Håkon dobbeltklikker/fester til oppgavelinjen)
+├── Excel Macro Installer.exe.bak-v2.4.6.0  (363 008 B — gammel sikkerhetskopi, kan slettes)
+├── Macros\
+│   ├── Kolonnevelger.ps1          (27 676 B)
+│   ├── Mail-utsender.ps1          (138 271 B)
+│   ├── Kontaktsentralen.ps1       (168 921 B)
+│   ├── Nettskjema-henter.ps1      (132 812 B)
+│   └── Makromeny.ps1              (65 364 B)
+├── Resources\
+│   ├── icon.ico                   (270 398 B, multi-size hovedikon)
+│   ├── icon-kolonnevelger.ico     (67 646 B, 128×128, 32bpp)
+│   ├── icon-mailutsender.ico      (67 646 B)
+│   ├── icon-kontaktsentralen.ico  (67 646 B)
+│   ├── icon-makromeny.ico         (67 646 B)
+│   ├── icon-nettskjemahenter.ico  (67 646 B)
+│   └── Kilde-PNG\                 (TOM — se åpne punkter)
+├── Data\
+│   ├── macro-metadata.json        (1 480 B)
+│   ├── installed-files.json       (1 949 B — Håkons ekte register, se dataformater)
+│   └── known-files.json           (6 B, «[ ]» ved tom liste)
+├── Installer\
+│   ├── Excel Macro Installer.ps1  (59 116 B — KILDEKODEN, rediger her)
+│   └── Bygg-Ikoner.ps1            (10 026 B — bygger ikonene, se ikonsystem)
+└── Guides\
+    ├── README.md                              (7 330 B — delvis utdatert, se åpne punkter)
+    ├── Kontaktsentralen - brukerveiledning.md  (6 986 B)
+    └── Kontaktsentralen - overlevering.md      (observert 2026-09-21, ikke nevnt i tidligere filoversikt — lagt til av Kontaktsentralen-sessionen ved overlevering)</code></pre>
+  <p>Kjent begrensning i sporingen (gjelder hele «Installerte filer»-fanen): registeret oppdateres KUN når man installerer/fjerner GJENNOM EMI. Kjører man en <code>.ps1</code> direkte utenom EMI, blir registeret utdatert sammenlignet med virkeligheten.</p>
+
+  <h4>Fane «Installerte filer» (standardfanen, møtes av denne)</h4>
+  <p>Ett KORT per Excel-fil: filnavnet stort og fett øverst, full sti under UTEN avkutting (Håkons eksplisitte ønske — se preferanser), og én linje per installert makro på akkurat den fila i alfabetisk rekkefølge (samme rekkefølge på tvers av alle kort), hver med en versjonspille. En linje vises oransje og fet hvis <code>Macros\</code>-mappas versjon er nyere enn det som faktisk er installert der.</p>
+  <ul>
+    <li><strong>«+ Legg til fil»</strong> (øverst på fanen) — velg en Excel-fil for å legge den til i oversikten, FØR man har bestemt seg for hvilken makro som skal installeres på den.</li>
+    <li><strong>«+ Legg til makro»</strong> (på hvert filkort) — åpner en liten modal ikon-velger (<code>Vis-MakroVelger</code>) med ikon og navn for hver tilgjengelige makro; ett klikk installerer den valgte makroen på akkurat den fila, ingen ny fildialog trengs.</li>
+    <li><strong>«Fjern fil»</strong> (på hvert filkort) — fjerner KUN sporingen her (<code>Fjern-FilHelt</code>); rører INGENTING i selve Excel-fila. Egen bekreftelsesdialog som eksplisitt sier «dette endrer ingenting i selve Excel-fila».</li>
+    <li><strong>«Oppdater»</strong> (på hver makrolinje) — installerer den makroen på nytt uten å måtte lete opp fila igjen.</li>
+    <li><strong>«Fjern»</strong> (på hver makrolinje) — EKTE avinstallering (<code>Fjern-MakroFraFil</code>): fjerner VBA-koden og knappen for akkurat den makroen FRA SELVE Excel-fila. Egen bekreftelsesdialog som eksplisitt advarer «FRA SELVE Excel-fila» i store bokstaver, siden dette er en reell endring i arbeidsboken og ikke bare en sporingsendring. Eventuelle lagrede innstillinger (f.eks. plassholder-koblinger, skjulte konfigark) røres ikke — en senere reinstallasjon gjenbruker dem.</li>
+  </ul>
+
+  <h4>Fane «Makroer»</h4>
+  <p>Ett kort per makro: ikon, nyeste versjon (fra <code>Macros\</code>-filens innhold), «sist endret» (kildefilens <code>LastWriteTime</code>), kort beskrivelse fra metadata, og en «Installer / Oppdater»-knapp som selv spør om målfil (<code>Velg-ExcelFil</code> → <code>OpenFileDialog</code>) før den starter installasjonen. Fila og versjonen som ble installert dukker automatisk opp i «Installerte filer»-fanen etterpå.</p>
+  <p>Nederst i vinduet vises EMIs egen versjon; se selvoppdateringsavsnittet for hva som skjer når den ikke stemmer med <code>.exe</code>-fila på disk.</p>

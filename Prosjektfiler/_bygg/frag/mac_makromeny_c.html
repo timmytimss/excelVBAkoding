@@ -1,0 +1,77 @@
+  <h3 id="mac-makromeny-test">Testing av denne makroen</h3>
+  <div class="callout warn">Absolutt regel: åpne, les eller rør aldri Håkons ekte filer (Hovedarbeidsboken, Testfil eller andre levende arbeidsbøker). Håkon: «Du skal ikke gjøre noe med Hovedarbeidsboken!». All testing skjer i egne kastefiler.</div>
+  <p>Generelle teknikker er beskrevet i <a href="#t-makromeny-kastefiler">testing_makromeny</a>-oppføringene (kastefiler, delt Excel-instans, modale skjemaer med EnumWindows/PostMessage, PrintWindow, ikonverifisering, krasj-simulering, rydding). Kort om hva som ble gjort for Makromeny:</p>
+  <ul>
+    <li><strong>Installasjonssyklus:</strong> kastefil <code>MakromenyCrashTest2_&lt;tilfeldig&gt;.xlsm</code> i <code>%TEMP%</code> (laget via Excel COM: <code>Workbooks.Add</code> -&gt; <code>SaveAs</code> xlsm 52). Installer med <code>powershell -File Makromeny.ps1 -Path &lt;fil&gt;</code>, test <code>-Uninstall</code>, verifiser persistens (lukk -&gt; åpne på nytt -&gt; sjekk komponenter).</li>
+    <li><strong>OnAction-fiksen</strong> for alle fem installere: installer i kastefil mens flere bøker er åpne.</li>
+    <li><strong>Kobling til Excel:</strong> <code>GetActiveObject</code> + finn boka på <code>FullName</code>; kvalifisert kall <code>$excel.Run("'Fil.xlsm'!SettArkKnappPaa")</code>. ROT-enumerering feilet.</li>
+    <li><strong>Krasjfiksen i 2.2.1</strong> ble simulert med test-modul <code>modTest</code> (<code>VBComponents.Add(1)</code>, fjernet etterpå) og <code>SimulerKrasjScenario</code>: aktiver «SlettesSnart», slett det (<code>DisplayAlerts = False</code>), aktiver «Makromeny»-fanen -&gt; den modale menyen lukkes med WM_CLOSE -&gt; «INGEN_KRASJ_OK» skrives til A1 -&gt; aktivt ark er første ark. Kjørt med <code>Run-CrashTest.ps1</code>.</li>
+    <li><strong>Modal meny:</strong> trigger i bakgrunnen, <code>EnumWindows</code> -&gt; klasse <code>ThunderDFrame</code> + caption «Makromeny», <code>PrintWindow(hwnd)</code> for skjermbilde, <code>PostMessage(hwnd, 0x0010, 0, 0)</code> (WM_CLOSE) for å lukke.</li>
+    <li><strong>Ikoner:</strong> last lagret .ico på nytt med <code>System.Drawing.Icon</code>, sjekk Width/Height, rendre i ekte WinForms-PictureBox (<code>Verify-RealRender.ps1</code>); småstørrelse-forhåndsvisning med <code>Preview-Small.ps1</code>.</li>
+    <li><strong>Ikke verifisert automatisk:</strong> ekte museklikk på en dynamisk flis. UI Automation ser ikke UserForm-kontroller. Delene er verifisert hver for seg: bygging av menyen, Unload før Run, og Run. Ekte klikk-test gjenstår for Håkon.</li>
+    <li>Hvis Håkon har åpnet Makromeny i sin egen fil under testing: vent på ham («Jeg lukker nå») og be om lov.</li>
+  </ul>
+
+  <h3 id="mac-makromeny-apent">Åpne punkter, begrensninger og idéer</h3>
+  <h4>Åpne punkter og begrensninger</h4>
+  <ul>
+    <li>Håkons ekte filer (Hovedarbeidsboken, Testfil) kjører fortsatt <strong>eldre Makromeny 2.0.0</strong> til han trykker «Oppdater» i EMI. Krasjfiksen 2.2.1 ligger i <code>EMI\Macros</code> men er ikke aktiv i hans filer før oppdatering.</li>
+    <li>Ekte museklikk på flis er ikke verifisert (UI Automation ser ikke UserForm-kontroller).</li>
+    <li>EMI: ny .exe (2.4.7.0) må startes på nytt for at nye ikoner skal vises.</li>
+    <li>Stale header-kommentar i <code>Makromeny.ps1</code> linje 15–18 om knappe-deteksjon (rettes ved neste versjon).</li>
+    <li>Ny makro i menyen krever endring på TRE steder (<code>HentKjentMakroInfo</code>; <code>IconB64_*</code>; EMI <code>$script:IkonBakgrunnPerMakro</code> + <code>macro-metadata.json</code> + <code>icon-*.ico</code>). Se tabellen over.</li>
+    <li>Krav: «Trust access to VBA project» er påkrevd; uten den vises bare en melding og ingen fliser.</li>
+    <li>Tile-ikonene (~22 px) er detaljerte (Håkons design); vurder enklere småversjoner hvis han klager på lesbarhet.</li>
+    <li>Innstillingsarket <code>MakromenyInnst_Hidden</code> blir liggende etter <code>-Uninstall</code> (bevisst).</li>
+    <li>Hjelpescripts har stier som peker til den gamle scratchpad-mappa og til <code>EMI\Resources</code>; juster før bruk (README i hjelpescripts-mappa).</li>
+  </ul>
+  <h4>Idéer (fra Makromeny-sessionen)</h4>
+  <ul>
+    <li>Gjør registreringen av makroer datadrevet: felles JSON, eller at hver makro registrerer seg med en liten «register»-Sub.</li>
+    <li>Status/antall per flis; tastatursnarveier 1–4; søkefelt; bedre avrunding via Frame/Image; mørk modus.</li>
+    <li>«Rydd alt»-bryter som også fjerner det skjulte innstillingsarket.</li>
+    <li>Enklere småversjoner av ikoner ved lesbarhetsklager.</li>
+  </ul>
+
+  <h4 id="mac-makromeny-ideark">Idéarkiv fra det opprinnelige utkastet</h4>
+  <div class="callout warn">Forbigått: Dette er et gammelt ChatGPT-utkast (fra den gamle, nå avviklede prosjektstrukturen: <code>Makromeny\Makromeny.txt</code>, ca. 1 000 linjer, første oppdragsbeskrivelse) til en <em>tabellstyrt</em> makromeny. Det er <strong>ikke</strong> det som ble bygget og er forbigått av dagens plug-in-arkitektur (installerbar .ps1 via EMI, flisemeny, deteksjon via VBA-komponentnavn). Bare idéer som fortsatt kan være nyttige er tatt vare på her.</div>
+  <p>Utkastets opplegg: ark «MakroMeny» med Excel-tabell <code>tblMakroMeny</code> (kolonner Aktiv, Gruppe, Menynavn, Makro, Beskrivelse, Bekreft, Rekkefølge; Aktiv/Bekreft = «Ja»/«Nei»; Makro-kolonnen = faktisk prosedyrenavn), VBA-moduler <code>modMeny</code>, <code>modMakroMotor</code>, <code>modLogging</code>, UserForm <code>frmMakroMeny</code> (ListBox <code>lstMakroer</code> med 5 kolonner, knappene <code>cmdKjor</code>, <code>cmdOppdater</code>, <code>cmdLukk</code>, <code>cmdKjorAlle</code>) og valgfritt ark «Logg». Hvorfor det er forbigått: krever en manuell tabell i hver arbeidsbok, har Lukk-knapp og listeutseende (Håkon ville ha fliser uten Lukk), bruker ukvalifisert <code>Application.Run Makronavn</code> (feiler ved flere åpne bøker, se <a href="#g-delt-excel-application-run">delt Excel-instans</a>) og setter <code>Application.Cursor = xlWait</code> (gir hengende laster-markør, se <a href="#g-application-cursor-xlwait">Cursor</a>).</p>
+  <p>Idéer som fortsatt kan være nyttige:</p>
+  <table>
+    <thead><tr><th>Idé</th><th>Innhold i utkastet</th></tr></thead>
+    <tbody>
+      <tr><td>Tabellstyrt meny via <code>tblMakroMeny</code></td><td>Menyen leses fra en tabell, så nye makroer legges til som en rad uten kodeendring. Utkastets v2-mål: dynamiske knapper der hele menyen styres fra <code>tblMakroMeny</code> uten å endre UserForm-koden. Relevant for å fjerne dagens trippel-vedlikehold (jf. idé om datadrevet registrering); dagens løsning bevisst unngår en manuell tabell i brukerens bok, så en eventuell variant må leve utenfor brukerens ark (f.eks. skjult ark eller JSON).</td></tr>
+      <tr><td>Søkefelt</td><td>Tekstfelt øverst i skjemaet; skriver man «rapport» vises bare relevante makroer.</td></tr>
+      <tr><td>Kategorifilter / grupper</td><td>Filter som Alle, Rapport, Data, Eksport, Verktøy, Admin; menyen gruppert per <code>Gruppe</code> med overskrifter.</td></tr>
+      <tr><td>Status</td><td>Vis OK, Feil, Ikke funnet, Ikke aktiv per makro. Utkastets <code>MakroFinnes</code> skannet kodelinjer i alle VBComponents etter «Sub Navn(» (krever VBA-tilgangstillit); dagens <code>VBAKomponentFinnes</code> gjør en enklere komponentnavn-sjekk.</td></tr>
+      <tr><td>Sist kjørt</td><td>Logg tidspunkt for siste kjøring og vis det per makro (f.eks. «Sist kjørt: 11.09.2026 14:52»).</td></tr>
+      <tr><td>Kjøretid</td><td>Logg hvor lang tid hver makro brukte; nyttig for makroer som tar flere minutter.</td></tr>
+      <tr><td>Feillogg</td><td>Loggark med Tidspunkt, Bruker (<code>Application.UserName</code>), Makro, Feilnummer, Feilmelding; utkastet logget Startet/Fullført/Avbrutt av bruker/FEIL og OK/FEIL. Logging må ikke selv feile (<code>On Error GoTo Avslutt</code>).</td></tr>
+      <tr><td>Bekreft-flagg</td><td>Makroer som sletter eller endrer mye data merkes <code>Bekreft = Ja</code> og gir «Er du sikker…»-dialog før kjøring (standardknapp Nei).</td></tr>
+      <tr><td>Avhengigheter</td><td>Kolonne «Avhengig av»; systemet kjører forutsetninger automatisk (OppdaterData -&gt; OppdaterPivoter -&gt; LagRapport -&gt; EksporterPDF).</td></tr>
+      <tr><td>Kjøresekvenser</td><td>En knapp som kjører flere makroer i rekkefølge, f.eks. «Generer månedsrapport» = 1 OppdaterData, 2 KontrollerData, 3 OppdaterPivoter, 4 LagRapport, 5 EksporterPDF. Utkastet kalte dette «en av de mest nyttige funksjonene». Utkastet hadde også en enkel «Kjør alle»-knapp.</td></tr>
+      <tr><td>Admin-modus</td><td>Passordbeskyttet område for å aktivere/deaktivere makroer, endre navn, beskrivelser og rekkefølge, opprette sekvenser og se feillogg.</td></tr>
+      <tr><td>Startside-ark</td><td>Alternativ til én knapp: eget «Start»-ark med store knapper gruppert (Makromeny, Data, Rapport, Admin med Innstillinger/Logg). (Dagens Ark-knapp-fane løser noe av det samme.)</td></tr>
+      <tr><td>Prinsippet «makrokode -&gt; makromotor -&gt; menykonfigurasjon -&gt; UserForm»</td><td>Ikke legg makrologikk i UserForm-knapper (dårlig: 500 linjer i <code>cmdOppdater_Click</code>; bedre: <code>KjorMakro "OppdaterData"</code>). UserForm er bare grensesnitt; logikken ligger i egne moduler. Dagens arkitektur følger prinsippet: <code>clsMakroTile</code> og skjemaet kaller bare <code>KjorValgtMakro</code>.</td></tr>
+      <tr><td>Application.Run og argumenter</td><td><code>Application.Run Makronavn</code> fungerer for Public Subs uten argumenter. Makroer som krever argumenter (f.eks. <code>EksporterRapport(ByVal Filnavn As String)</code>) krever at motoren utvides til å sende dem inn. Utkastet anbefalte å standardisere menymakroer til <code>Public Sub MakroNavn()</code> uten argumenter som henter kontekst fra arbeidsboken selv. Merk: dagens kall må i tillegg være arbeidsbok-kvalifisert, <code>'Bok.xlsm'!Navn</code>.</td></tr>
+      <tr><td>Gjenoppretting av Application-tilstand ved feil</td><td>Motoren må alltid sette <code>ScreenUpdating</code>, <code>EnableEvents</code>, <code>DisplayAlerts</code> (og i utkastet <code>Cursor</code>) tilbake selv om makroen feiler, ellers kan Excel bli stående med hendelser/skjermoppdatering av. Avansert variant: lagre de opprinnelige verdiene før start i stedet for å anta True. (Dagens <code>GjenopprettTilstand</code> dekker dette; ikke sett <code>Cursor</code>.)</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="mac-makromeny-filer">Filer og hjelpescripts</h3>
+  <ul>
+    <li><strong>Bevares:</strong> <code>EMI\Macros\Makromeny.ps1</code> (riktig kilde). Andre installere i samme mappe (alle med OnAction-fiksen): <code>Kolonnevelger.ps1</code> 27 676 byte, <code>Mail-utsender.ps1</code> 138 271, <code>Kontaktsentralen.ps1</code> 168 921, <code>Nettskjema-henter.ps1</code> 132 812. Lokal kopi: <code>C:\Users\haaklun\Documents\Claude (lokal)\Makromeny\Makromeny.ps1</code>.</li>
+    <li><strong>EMI-kilde:</strong> <code>Installer\Excel Macro Installer.ps1</code>, <code>.exe</code>, <code>.exe.bak-v2.4.6.0</code> (363 008 byte), <code>Data\macro-metadata.json</code> (1 480 byte), <code>installed-files.json</code> (1 949 byte), <code>known-files.json</code> (6 byte), <code>Resources\icon-*.ico</code> (5 stk. à 67 646 byte) + <code>icon.ico</code> (270 398 byte), <code>Guides\README.md</code> (7 330 byte), <code>Guides\Kontaktsentralen - brukerveiledning.md</code> (6 986 byte). Ingen Makromeny-guide finnes.</li>
+    <li><strong>Forsvinner ved sletting av den gamle, nå avviklede prosjektmappa (Makromeny):</strong> <code>Makromeny.ps1</code> (65 364 byte, identisk med EMI\Macros) og <code>Makromeny.txt</code> (21 030 byte, oppdrag/utkast, se idéarkivet).</li>
+    <li><strong>Øvrige prosjektnotater under den gamle, nå avviklede prosjektstrukturen:</strong> <code>Formateringskontroll\Formateringskontroll.txt</code> 33 438 byte; <code>Nettskjema henter\Nettskjema henter.txt</code> 18 630 byte (+ .ps1); <code>Tabellorganisering\Tabellorganisering.txt</code> 36 106 byte; felles <code>Opplæringsnotater.txt</code> og en prosjektspesifikk oversiktsfil i HTML.</li>
+    <li><strong>Hjelpescripts</strong> (kopiert til <code>_overlevering\Makromeny\hjelpescripts\</code>; kjør med Windows PowerShell 5.1, juster stier):
+      <code>Convert-UserIcons.ps1</code> (Håkons PNG -&gt; avrundet gradient-badge -&gt; 128x128 .ico via <code>Bitmap.GetHicon</code> + <code>Icon.Save</code>),
+      <code>Make-Base64.ps1</code> (.ico -&gt; 40x40 BMP -&gt; base64 i 200-tegns VBA-biter <code>s = s &amp; "..."</code>),
+      <code>Verify-RealRender.ps1</code> (last lagret .ico på nytt og rendre i ekte PictureBox),
+      <code>Preview-Small.ps1</code> (forhåndsvisning ca. 40 px, også 3x forstørret),
+      <code>part1.txt</code> (VBA for <code>modMakroMeny</code> v2.2.1 uten <code>IconB64_*</code>),
+      <code>part2.txt</code> (<code>clsMakroTile</code>, <code>frmMakroMeny</code>-kode og selve PowerShell-installeren: token-substitusjon av æøå, <code>Add/Remove-ArkKnapp</code> for ThisWorkbook, install/oppdater/<code>-Uninstall</code>, designer-bygging), <code>README.txt</code>.
+      Makromeny.ps1 = part1 + <code>IconB64_*</code>-blokker + part2; part1/part2 er bare oversikt, bruk <code>EMI\Macros\Makromeny.ps1</code> som kilde. Fra sessionens scratchpad, ikke kopiert til hjelpescripts-mappa: <code>Generate-Icons.ps1</code> (forkastede design, kun historikk), <code>Run-CrashTest.ps1</code>, <code>Find-MyExcel.ps1</code> (ROT-test, ikke anbefalt).</li>
+    <li>Claude-minnemappa for Makromeny-sessionen var tom (ingen minnefiler).</li>
+  </ul>
+</section>

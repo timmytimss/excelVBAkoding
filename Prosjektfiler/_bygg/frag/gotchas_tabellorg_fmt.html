@@ -1,0 +1,29 @@
+<div class="gotcha" id="g-formatconditions-union" data-cat="excel">
+  <h4>FormatConditions.Add feiler på ikke-sammenhengende Union-range</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Runtime-feil «Invalid procedure call or argument» ved <code>rng.FormatConditions.Add(...)</code> når man legger til en betinget formatering-regel på flere valgte kolonner samtidig.</dd>
+    <dt>Årsak</dt><dd><code>FormatConditions.Add</code> godtar ikke et <code>Range</code>-objekt med flere ikke-sammenhengende områder — f.eks. en <code>Union</code> av to tabellkolonner som ikke ligger rett inntil hverandre.</dd>
+    <dt>Løsning</dt><dd>Legg til regelen separat per kolonne i en løkke i stedet for på én samlet Union-range, når «flere kolonner»-modus er valgt. «Hele raden» er trygt uansett fordi <code>ListObject.DataBodyRange</code> alltid er ett sammenhengende område.</dd>
+  </dl>
+  <p class="src">Kilde: Formateringskontroll (<code>modFormateringskontroll.AddColorRule</code>, dokumentert som kodekommentar i kilden)</p>
+</div>
+
+<div class="gotcha" id="g-flytt-for-omdop" data-cat="vba">
+  <h4>Flytt Excel-tabellkolonner før du gir dem nytt navn, ikke etter</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Senere kolonneoppslag mislykkes, eller et nytt navn kolliderer med et annet (fortsatt) gammelt kolonnenavn, når en makro både flytter og omdøper kolonner i en Excel-tabell (<code>ListObject</code>) ut fra en navnebasert konfigurasjon.</dd>
+    <dt>Årsak</dt><dd>Hvis omdøping skjer før flytting, kan et nytt navn overlappe med et gammelt navn som ennå ikke er byttet ut, og makroens videre oppslag på originalnavnet mister koblingen.</dd>
+    <dt>Løsning</dt><dd>Gjør alltid kolonneflytting (rekkefølge) ferdig først, deretter omdøping, som to atskilte trinn i den rekkefølgen. Følges konsekvent i Tabellorganisering (<code>OrganiserKolonner</code> kjøres før <code>EndreKolonnenavn</code>).</dd>
+  </dl>
+  <p class="src">Kilde: Tabellorganisering (<code>.txt</code>-designdokumentets eksplisitte «VIKTIG»-merknad, fulgt i den bygde koden)</p>
+</div>
+
+<div class="gotcha" id="g-cut-insert-risiko" data-cat="excel">
+  <h4>Range.Cut + Insert for å flytte tabellkolonner er skjørt i arbeidsbøker med formler/Power Query/Pivot</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ingen konkret feil observert i kildene, men flagget som en kjent risiko: kolonneflytting via <code>lc.Range.Cut</code> + <code>tbl.ListColumns(pos).Range.Insert Shift:=xlToRight</code> kan ødelegge formler, strukturerte referanser, Power Query-tilkoblinger eller pivottabeller som er avhengige av tabellens kolonner, hvis disse finnes.</dd>
+    <dt>Årsak</dt><dd>Cut/Insert flytter fysiske celler og kan forstyrre referanser som peker på faste posisjoner eller som ikke oppdateres pent ved innsetting, særlig i store/komplekse arbeidsbøker.</dd>
+    <dt>Løsning</dt><dd>For en tryggere variant: les hele tabellen til minnet, bygg en mapping gammel indeks → ny indeks, bygg et nytt data-array i riktig rekkefølge, opprett nye headere, skriv data kontrollert tilbake, og gjenopprett format/datatyper/formler eksplisitt — i stedet for å Cut/Insert direkte. <strong>Ikke bygget ennå</strong> i Tabellorganisering v1.0.0, som fortsatt bruker den enkle Cut/Insert-metoden; vurder før bruk på en arbeidsbok som faktisk har formler/strukturerte referanser/Power Query/pivottabeller knyttet til tabellen.</dd>
+  </dl>
+  <p class="src">Kilde: Tabellorganisering (<code>.txt</code>-designdokumentets egen advarsel, ikke adressert i den bygde <code>.ps1</code>-koden)</p>
+</div>

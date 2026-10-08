@@ -1,0 +1,53 @@
+<section class="macro" id="mac-kolonnevelger" data-nav="Under utvikling|Kolonnevelger" data-title="Kolonnevelger" data-status="Under utvikling · v1.0.1 (tidlig, ikke prioritert nå)">
+  <h2>Kolonnevelger</h2>
+  <p class="lead">Lar brukeren vise/skjule kolonner i en Excel-tabell via avkrysningsbokser, med åtte lagrbare, fargede «loadout»-plasser for raskt å bytte mellom forhåndsdefinerte kolonneoppsett.</p>
+  <div class="callout note">Kan bli slått sammen med Tabellorganisering og Formateringskontroll til én makro, «<a href="#cellekontrollen">Cellekontrollen</a>» — kun en idé foreløpig, ikke igangsatt.</div>
+  <dl class="facts">
+    <dt>Versjon</dt><dd>1.0.1, via VBA-konstanten <code>COLUMN_PICKER_VERSION = "1.0.1"</code> (EMIs andre regex for versjonsuttrekk). Historikk: 1.0.0 → 1.0.1 la til <code>-Uninstall</code> og kvalifisert <code>OnAction</code>.</dd>
+    <dt>Kilde</dt><dd><code>…\Digitale verktøy\Excel Macro Installer\Macros\Kolonnevelger.ps1</code> (27 676 byte). INGEN annen kilde finnes — dette er den eneste og kanoniske versjonen (til forskjell fra Mail-utsender, som har en foreldet prosjektkopi liggende). <code>param()</code>: <code>$Path</code>, <code>[switch]$Uninstall</code>.</dd>
+    <dt>VBA-komponenter</dt><dd><code>modColumnPicker</code> (standardmodul), <code>clsColumnCheckHandler</code> (klassemodul med <code>WithEvents Chk As MSForms.CheckBox</code>), <code>frmColumnPicker</code>, <code>frmLoadoutEdit</code>. Skjult ark <code>ColumnLoadouts_Hidden</code>.</dd>
+    <dt>EMI-ikon/farge</dt><dd>Ikke spesifikt oppgitt i kildene for denne fragment-sesjonen. Kolonnevelger- og Mail-utsender-ikonene er stilreferansen Håkon peker til for andre makroers ikoner (jf. Håkons preferanser).</dd>
+  </dl>
+
+  <h3 id="mac-kolonnevelger-bruk">Formål og bruk</h3>
+  <p>Knapp «Kolonnevelger» på arket åpner <code>frmColumnPicker</code>: én avkrysningsboks per kolonne i den aktive tabellen, som viser/skjuler kolonnen LIVE via <code>EntireColumn.Hidden</code> idet den hukes av/på. I tillegg åtte fargede «loadout»-plasser: venstreklikk bruker plassen (setter kolonnesynlighet til det lagrede oppsettet), HØYREKLIKK åpner <code>frmLoadoutEdit</code> for å redigere/lagre gjeldende synlighet til den plassen. Høyreklikk-håndteringen bruker <code>MouseUp</code>, samme kontrollmekanisme Mail-utsender til slutt måtte gå over til for sin avkrysningsliste — men her var det aldri noe <code>Click</code>-problem å fikse; se <a href="#g-listbox-click-never-fires">V1</a> i gotcha-fila for kontrasten. Forutsetter nøyaktig én tabell per ark.</p>
+  <p>Kolonnevelger og Mail-utsender har en bevisst synergi: Mail-utsenders lister (<code>frmSendMail</code>, <code>frmMasseSend</code>) respekterer kolonner som er skjult via Kolonnevelger, og teller heller ikke skjulte/filtrerte rader som «gjenstår».</p>
+
+  <h3 id="mac-kolonnevelger-arkitektur">Arkitektur</h3>
+  <ul>
+    <li><code>modColumnPicker</code>: <code>ShowColumnPicker</code> (arkknappens <code>OnAction</code>-mål), <code>Save</code>/<code>Clear</code>/<code>GetLoadoutSlot*</code>, <code>ApplyVisibleColumns</code>, <code>ResetAllColumns</code>.</li>
+    <li><code>clsColumnCheckHandler</code>: én klasseinstans per dynamisk opprettet avkrysningsboks (<code>WithEvents Chk As MSForms.CheckBox</code>) — nødvendig fordi hendelser på kontroller opprettet i kode krever en <code>WithEvents</code>-klasse, og instansene må holdes i live i en samling så de ikke søppelsamles (samme mønster/fallgruve som Makromenys fliser, se <a href="#g-dynamiske-kontroller-withevents">gotcha i Makromeny-fila</a>).</li>
+    <li>Skjult ark <strong><code>ColumnLoadouts_Hidden</code></strong>: én rad per kombinasjon av ark + tabell + plassnummer, med navn, farge og synlige kolonner lagret som en pipe-delt streng («a|b|c»).</li>
+    <li>Skjemaene bygges i en midlertidig arbeidsbok, akkurat som Mail-utsender (se <a href="#mac-mailutsender-arkitektur">felles installer-mønster</a>).</li>
+    <li>Ekstra installer-detaljer: <code>$excel.DisplayAlerts = $false</code> under bygging, og en norsk feilmelding spesifikt for manglende «Tillit til tilgang til VBA-prosjektobjektmodellen» (Trust Center).</li>
+    <li><code>-Uninstall</code> fjerner de fire VBA-komponentene og knappen (<code>OnAction</code> matcher <code>ShowColumnPicker</code>, også i kvalifisert form), men lar <code>ColumnLoadouts_Hidden</code> stå urørt (en reinstallasjon gjenbruker dermed lagrede loadouts).</li>
+    <li>Samme kvalifiserte <code>OnAction</code>-fiks som Mail-utsender (<a href="#g-onaction-feilbinding">V15</a>) er lagt til av en annen session — se «Åpne punkter» for usikkerheten rundt hvorvidt dette faktisk inngår i den bumpede 1.0.1-versjonen eller er en uversjonert endring på samme måte som i Mail-utsender.</li>
+  </ul>
+
+  <h3 id="mac-kolonnevelger-historikk">Funksjoner og versjonshistorikk</h3>
+  <table class="hist">
+    <thead><tr><th>Versjon</th><th>Hva</th></tr></thead>
+    <tbody>
+      <tr><td>1.0.0</td><td>Grunnfunksjonalitet: avkrysningsbasert vis/skjul, åtte loadout-plasser (bruk/rediger).</td></tr>
+      <tr><td>1.0.1</td><td><code>-Uninstall</code> lagt til (for EMIs «Fjern»-knapp) og kvalifisert <code>OnAction</code> (cross-workbook-fiksen).</td></tr>
+    </tbody>
+  </table>
+  <p>Kolonnevelger er den ELDSTE av de to makroene i dette fragmentet, og fungerte som selve referanseimplementasjonen («det samme mønsteret vi har brukt før») da Mail-utsender først skulle bygges — se designbeslutninger i Mail-utsender-fragmentet for hvorfor «.ps1-installer med VBA i heredocs» ble valgt der. Filen har flyttet plassering minst to ganger (fra en tidlig lokal mappe, via en flat «Excel makroer»-mappe, til dagens plassering under EMIs egen mappestruktur) — ren organisatorisk historikk, ingen funksjonsendring.</p>
+
+  <h3 id="mac-kolonnevelger-design">Designbeslutninger og hvorfor</h3>
+  <ul>
+    <li><strong>Nøyaktig én tabell per ark</strong> er en bevisst forenkling, ikke en påvist teknisk begrensning i seg selv — verktøyet er tenkt for enkle ark med ett dataoppsett.</li>
+    <li><strong>Høyreklikk via <code>MouseUp</code>, ikke <code>Click</code>/<code>DblClick</code>:</strong> ingen kilde dokumenterer at dette var en fiks for et observert problem her (til forskjell fra Mail-utsenders åtte forsøk) — mest sannsynlig et bevisst, føre-var valg fra starten, siden <code>MouseUp</code> uansett er den mest robuste hendelsen for museknapp-spesifikk logikk i MSForms.</li>
+    <li><strong>Loadout-lagring som pipe-delt tekststreng</strong> («a|b|c») i stedet for én kolonne per mulig felt — enkelt å utvide til vilkårlig mange kolonner uten å endre arkstrukturen i <code>ColumnLoadouts_Hidden</code>.</li>
+    <li><strong>Aldri generelt filter ved opprydding av knapper</strong> — samme regel som i Mail-utsender (<a href="#g-blanket-ui-cleanup">C6</a>), direkte fordi Kolonnevelgers egen knapp en gang ble et offer for nettopp en slik generell opprydding gjort av Mail-utsenders installer.</li>
+  </ul>
+
+  <h3 id="mac-kolonnevelger-test">Testing av denne makroen</h3>
+  <p>Kildene for denne fragment-sesjonen inneholder ikke egne, detaljerte testnotater for Kolonnevelger spesifikt — den er i hovedsak dokumentert som den STABILE referanseimplementasjonen andre makroers installer-mønster er kopiert fra, ikke som gjenstand for egen feilsøking. Samme generelle testteknikker som for Mail-utsender gjelder i prinsippet (se eget testteknikk-fragment): egen kastefil/testarbeidsbok, aldri Håkons ekte filer, COM-tilstandslesing fremfor skjermbilder.</p>
+
+  <h3 id="mac-kolonnevelger-apent">Åpne punkter, begrensninger og idéer</h3>
+  <ul>
+    <li><strong>Usikkert om 1.0.1 faktisk inkluderer den kvalifiserte <code>OnAction</code>-fiksen i en versjonsbumpet installasjon,</strong> eller om fiksen — i likhet med Mail-utsenders tilsvarende endring — ble lagt inn i EMI-kopien UTEN bump og dermed ikke slår inn på arbeidsbøker som allerede har 1.0.1 installert fra før. Kildene motsier hverandre på dette punktet: versjonshistorikken sier fiksen kom MED 1.0.1-bumpen, mens et annet sted i kildene nevner den som en uversjonert endring «tilsvarende Kolonnevelger (1.0.1)» sammen med Mail-utsenders egen uversjonerte fiks. Bør avklares før neste endring — se ferdigmeldingen for denne sesjonen.</li>
+    <li>Nøyaktig én tabell per ark er en reell, ikke fjernet begrensning — flere tabeller på samme ark støttes ikke.</li>
+  </ul>
+</section>

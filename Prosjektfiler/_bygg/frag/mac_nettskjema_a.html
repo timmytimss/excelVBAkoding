@@ -1,0 +1,99 @@
+<section class="macro" id="mac-nettskjema" data-nav="Makroer i drift|Nettskjema-henter" data-title="Nettskjema-henter" data-status="I drift · v3.22.1">
+  <h2>Nettskjema-henter</h2>
+  <p class="lead">Henter svar fra UiOs Nettskjema (API v3, OAuth client credentials) inn i Excel-tabeller: én tilkobling = ett Nettskjema (Form ID) = ett ark = én tabell, med én rad per respondent (<code>submissionId</code>) og én kolonne per spørsmål, oppdatert som UPSERT slik at tabellens identitet og andres formler/Power Query overlever.</p>
+  <dl class="facts">
+    <dt>Versjon</dt>
+    <dd>3.22.1 (21.09.2026). Versjonsmarkøren er konstanten <code>Public Const NETTSKJEMA_HENTER_VERSION As String = "x.y.z"</code> i <code>modNettskjema</code>; installeren sammenligner mot den og hopper over ved lik versjon, så markøren MÅ økes ved enhver kodeendring.</dd>
+    <dt>Kilde</dt>
+    <dd><code>EMI\Macros\Nettskjema-henter.ps1</code> (i praksis <code>Digitale verktøy\Excel Macro Installer\Macros\Nettskjema-henter.ps1</code>): ÉN PowerShell-fil, ca. 133 KB (132 812 B), <strong>UTF-8 MED BOM</strong>, LF-linjeavslutning. Dette er den deployerte kilden og kilden til sannhet. Lokale kopier (arbeidsmappa i OneDrive og <code>Documents\Claude (lokal)\Nettskjema henter\</code>) skal være byte-identiske, men kan gå ut av synk. Filen inneholder både installeren og all VBA-kildekode (som PowerShell here-strings).</dd>
+    <dt>VBA-komponenter</dt>
+    <dd>8: <code>JsonConverter</code>, <code>modCredentialManager</code>, <code>modAuthentication</code>, <code>modJsonFlatten</code>, <code>modNettskjema</code>, <code>frmNettskjemaKoblinger</code>, <code>frmNettskjemaInnstillinger</code>, <code>frmKolonneInnstillinger</code>. Alt late binding; krever VBA7/Windows (PtrSafe/LongPtr, WinHTTP, advapi32).</dd>
+    <dt>EMI-ikon/farge</dt>
+    <dd>Ikon <code>Resources\icon-nettskjemahenter.ico</code>; registrert i <code>EMI\Data\macro-metadata.json</code> og <code>installed-files.json</code>. Ikonfarge er ikke oppgitt i kildene. Knappen som legges på arket heter «Nettskjema-henter» (bindestrek, ikke mellomrom) med <code>OnAction = "AapneNettskjemaHenter"</code>. Kjøring: <code>powershell.exe -File Nettskjema-henter.ps1 -Path &lt;fil.xlsm&gt; [-Uninstall]</code>; uten <code>-Path</code> åpnes filvelger.</dd>
+    <dt>Nedstrøms</dt>
+    <dd>Håkons egen snarveimakro <code>OppdaterNettskjema</code> (Module1 i Hovedarbeidsboken.xlsm, IKKE via EMI) og Power Query-spørringer i samme arbeidsbok. Se «Formål og bruk».</dd>
+  </dl>
+
+  <div class="callout warn"><strong>Sensitiv data.</strong> Nettskjema-svar er respondentdata (navn, e-post, telefon, fritekst). Under bygging og testing skal innholdet aldri leses eller vises; kun struktur, formler, overskrifter og tellinger. Test alltid i en kastefil (se <a href="#mac-nettskjema-test">Testing</a>), aldri i Hovedarbeidsboken.xlsm. Client ID, Client Secret og Form ID er utelatt fra denne fila med vilje.</div>
+
+  <h3 id="mac-nettskjema-bruk">Formål og bruk</h3>
+  <p>Verktøyet installeres i en vilkårlig <code>.xlsm</code> via EMI (Makroer-fanen) og gir knappen «Nettskjema-henter» på arket som var aktivt ved installasjon. Hver tilkobling hører til ÉN Nettskjema-Form ID, får sitt eget ark og sin egen tabell <code>&lt;arknavn&gt;_tbl</code>. Det finnes ingen automatisk bakgrunnsoppdatering: Håkon vil selv styre når data hentes.</p>
+
+  <h4>Arbeidsflyt (bruker)</h4>
+  <ol>
+    <li><strong>Installer</strong> via EMI (Makroer-fanen). Knappen legges på aktivt ark. (EMI-appen kan trenge «Start programmet på nytt» for å plukke opp en ny metadata-oppføring.)</li>
+    <li><strong>Knapp → hovedmeny</strong> (<code>frmNettskjemaKoblinger</code>). Første gang tilbys en engangsmigrering av Client Secret hvis en gammel secret ligger i Windows Credential Manager men ikke i arbeidsboken (<code>OfferClientSecretMigrationIfNeeded</code>; kun fra hovedmenyen, aldri midt i en batch).</li>
+    <li><strong>Innstillinger → seksjon «Nettskjema API»</strong> (<code>frmNettskjemaInnstillinger</code>): Client ID og Client Secret (klartekst, redigerbar), faste adresser (token-URL og API-URL, skrivebeskyttet), <em>Lagre</em> og <em>Test tilkobling</em>. API-klienten opprettes på <code>authorization.nettskjema.no</code> og må i Nettskjemas tilgangsstyring gis tilgang til HVERT skjema (identitet <code>[clientId]@apiclient</code>); se <a href="#g-ns-tilgang-per-skjema">fallgruven om tilgang per skjema</a>.</li>
+    <li><strong>«+ Ny tilkobling»</strong>: oppgi Form ID (tallet i Nettskjema-URL-en) og et arknavn. Ark og tabell opprettes og første henting kjøres umiddelbart.</li>
+    <li><strong>Innstillinger → «Kolonner per skjema»</strong> → velg skjema → «Kolonner...» (<code>frmKolonneInnstillinger</code>): per kolonne synlig/skjult og alias. Alias utledes automatisk fra spørsmålsteksten hvis <code>/elements</code> svarer, og overskrives aldri hvis Håkon har satt ett selv. Lagre-og-bruk endrer den faktiske tabellen umiddelbart (skjul/vis + omdøp header).</li>
+    <li><strong>Oppdatering</strong>: huk av ett eller flere skjema i listen (avkrysningskolonne; Shift-klikk = område) → grønn knapp «Oppdater markerte nettskjema». Én samlet oppsummering («X av Y oppdatert» + feilliste med feilmelding per tilkobling).</li>
+    <li><strong>Fjern tilkobling</strong> (kan velge flere) sletter arket, registerraden OG alle kolonneinnstillinger for skjemaet, slik at en ny tilkobling til samme skjema starter friskt.</li>
+  </ol>
+
+  <h4>Nedstrøms bruk: Håkons snarveimakro og Power Query</h4>
+  <p>Håkon har en EGEN makro <code>OppdaterNettskjema</code> (Module1 i <code>Hovedarbeidsboken.xlsm</code>, vedlikeholdes manuelt, ligger bevisst utenfor EMI som «en liten egenlaget snarvei»). Den gjør i rekkefølge:</p>
+  <ol>
+    <li>Kaller <code>modNettskjema.GetRegistrySheet()</code> og løper over registerradene; for hver kalles <code>modNettskjema.RefreshConnectionRow(r)</code> (returnerer <code>Boolean</code>; feiltekst via <code>modNettskjema.LastErrorMessage()</code>).</li>
+    <li>Oppdaterer deretter Power Query-tilkoblingene: <code>For Each conn In ThisWorkbook.Connections</code>, kun OLEDB med «Microsoft.Mashup.OleDb.1», <code>conn.OLEDBConnection.BackgroundQuery = False</code>, <code>conn.Refresh</code>, og til slutt <code>Application.CalculateUntilAsyncQueriesDone</code> (ikke <code>RefreshAll</code>, som rører andre tilkoblinger; se <a href="#g-ns-pq-refresh-fra-vba">fallgruve</a>).</li>
+    <li>Setter overskriftsradhøyde 26 KUN på <code>Nettskjemarunde1_tbl</code> på arket «Samlet nettskjema rapport» (Power Query nullstiller høyden ved refresh; se <a href="#g-ns-pq-radhoyde">fallgruve</a>). Dette er det ENESTE stedet noe rører rad-/kolonnehøyde eller -bredde.</li>
+    <li>Viser antall nye rader per tilkobling. ScreenUpdating og EnableEvents slås av rundt løkka.</li>
+  </ol>
+  <div class="callout warn"><strong>KONTRAKT som ikke må brytes:</strong> <code>RefreshConnectionRow(r) As Boolean</code>, <code>LastErrorMessage()</code> og <code>GetRegistrySheet()</code> i <code>modNettskjema</code> må forbli <code>Public</code> og bakoverkompatible, fordi Håkons snarveimakro (utenfor EMI, ikke oppdatert av installeren) kaller dem. <code>RefreshAllConnections</code> ble erstattet av <code>RefreshConnectionRows</code> i v3.22.0; snarveimakroen bruker fortsatt <code>RefreshConnectionRow</code> per rad.</div>
+  <p>Nedstrøms i Hovedarbeidsboken: tabellene <code>NS_SK_tbl</code> (skolekontakt) og <code>NS_DS_tbl</code> (digital-sjekk) leses av Power Query med <code>Excel.CurrentWorkbook(){[Name="NS_SK_tbl"]}[Content]</code> og slås sammen med <code>kontakt_tbl</code> til <code>Nettskjemarunde1_tbl</code>. Håkons egne formler bruker STRUKTURERTE referanser (<code>NS_SK_tbl[Skole-id]</code>, <code>[@[Skole-id]]</code>) og kryss-ark-summer. Derfor er ListObject-identiteten «hellig» (se UPSERT-arkitekturen). Tabellene ble omdøpt fra standardnavnet <code>&lt;arknavn&gt;_tbl</code> til <code>NS_SK_tbl</code>/<code>NS_DS_tbl</code>; <code>WriteRowsToSheet</code> slår opp tabellnavnet fra registeret og faller tilbake til <code>ListObjects(1)</code>. Power Query ser BARE rader som faktisk ligger i tabellens DataBodyRange (se <a href="#g-ns-listrows-add-utenfor">rad utenfor tabellen</a> og <a href="#g-ns-kapasitetsrader">tomme rader</a>).</p>
+
+  <h4>Deling til kolleger</h4>
+  <p>Client ID og Secret ligger i arbeidsboken (skjult ark, se under), så samme <code>.xlsm</code> fungerer på andre PC-er uten Credential Manager. Forutsetning: Håkon har lagret filen ETTER at secret havnet i arbeidsboken og distribuerer akkurat den lagrede filen. Filen er sensitiv (VeryHidden er ikke kryptering). Kolleger skriver lokalt i egne tabellkopier; samtidig henting fra flere brukere eller SharePoint-samredigering er IKKE testet.</p>
+  <div class="callout note"><strong>Hvorfor det feilet hos en kollega (3.20.3):</strong> koden leste secret fra arbeidsbokens register først og falt tilbake til Credential Manager. Hos Håkon var registerfeltet tomt, men secret lå i Credential Manager, så det fungerte via fallback; hos kollegen fantes den ingen av stedene. Oppgradering kopierte ikke automatisk secret inn i boka. Løsningen (v3.21.0) er engangsmigreringen over. Ikke anta at OAuth-koden er feil før man har sjekket at secret faktisk ligger i den distribuerte fila. Test på kollegens PC uten å legge secret i hens Credential Manager.</div>
+
+  <h3 id="mac-nettskjema-arkitektur">Arkitektur</h3>
+
+  <h4>Installflyt (PowerShell)</h4>
+  <ol>
+    <li>Koble til Excel: <code>GetActiveObject</code> hvis Excel kjører, ellers <code>New-Object -ComObject</code>; åpne målfilen; sjekk «Trust access to VBA project object model» (<a href="#g-ns-vbproject-tillit">fallgruve</a>).</li>
+    <li>Les installert versjon fra <code>modNettskjema</code> via regex på versjonskonstanten. Lik versjon → «allerede installert og oppdatert». En komponent som finnes men er tom (0 linjer) håndteres via <code>CountOfLines &gt; 0</code> og behandles som fersk installasjon (<a href="#g-ns-tom-komponent">fallgruve</a>).</li>
+    <li>Bygg komponentene i en MIDLERTIDIG arbeidsbok: moduler med <code>VBComponents.Add(1)</code> + <code>AddFromString</code>; UserForms med <code>Add(3)</code> + <code>Designer.Controls.Add</code>. Eksporter til temp (<code>.bas</code>/<code>.frm</code>/<code>.frx</code>) og lukk byggeboka.</li>
+    <li>Fjern eksisterende komponenter med samme navn i målfilen og importer de nye.</li>
+    <li>Fersk installasjon: legg knapp (<code>Buttons().Add</code>, <code>OnAction = "AapneNettskjemaHenter"</code>, Caption «Nettskjema-henter») på det aktive arket. Installeren lagrer IKKE filen.</li>
+    <li><code>-Uninstall</code> fjerner kun egne navngitte komponenter og knapper med egen OnAction; ark og data røres ikke.</li>
+  </ol>
+
+  <h4>De 8 VBA-komponentene</h4>
+  <table>
+    <thead><tr><th>Komponent</th><th>Rolle</th></tr></thead>
+    <tbody>
+      <tr><td><code>JsonConverter</code></td><td>Patchet VBA-JSON v2.3.1; sen-bundet <code>Scripting.Dictionary</code>, ingen Scripting Runtime-referanse.</td></tr>
+      <tr><td><code>modCredentialManager</code></td><td>advapi32 <code>CredWriteW</code>/<code>CredReadW</code>/<code>CredDeleteW</code>. Kun migreringsfallback; mål-navn <code>NettskjemaHenter:&lt;clientId&gt;</code>. (Felt i CREDENTIAL-struct kan ikke hete <code>Type</code>; se <a href="#g-ns-type-reservert">fallgruve</a>.)</td></tr>
+      <tr><td><code>modAuthentication</code></td><td>Token (<code>AcquireAccessToken</code>), HTTP (<code>ApiGetWithRetry</code> med <code>AcceptHeader</code>-parameter, <code>ApiGetSingleAttempt</code>), retry/backoff (<code>BackoffSeconds</code>), UTF-8-dekoding (<code>DecodeUtf8ResponseBody</code>).</td></tr>
+      <tr><td><code>modJsonFlatten</code></td><td>NDJSON → bredt format (pivot på submissionId), parsing av <code>/elements</code>.</td></tr>
+      <tr><td><code>modNettskjema</code></td><td>Orkestrering, register, kolonneinnstillinger, UPSERT-skriving (<code>WriteRowsToSheet</code>, <code>VerifyAndRepairTable</code>, <code>ApplyColumnVisibility</code>), logging (<code>LogEvent</code>, <code>GetLogSheet</code>), versjonskonstant, <code>RefreshConnectionRow</code>/<code>RefreshConnectionRows</code>/<code>LastErrorMessage</code>/<code>GetRegistrySheet</code>, <code>RemoveConnection</code>, <code>SaveGlobalApiSettings</code>, <code>EnsureColumnRegistered</code>, <code>PreRegisterFormColumns</code>, <code>SetColumnAliasIfEmpty</code>, <code>SanitizeTableName</code>, <code>OfferClientSecretMigrationIfNeeded</code>, <code>AapneNettskjemaHenter</code>.</td></tr>
+      <tr><td><code>frmNettskjemaKoblinger</code></td><td>Hovedmeny: avkrysningsliste over tilkoblinger + fargede knapper.</td></tr>
+      <tr><td><code>frmNettskjemaInnstillinger</code></td><td>Innstillinger: seksjon «Nettskjema API» + «Kolonner per skjema» (åpner kolonnedialogen).</td></tr>
+      <tr><td><code>frmKolonneInnstillinger</code></td><td>Dynamisk bygd dialog: avkrysning + aliasfelt per registrert kolonne (samme mønster som Kolonnevelgerens <code>frmColumnPicker.LoadColumns</code>: <code>Controls.Add</code> i en rullbar Frame, fordi antall kolonner er ukjent på forhånd).</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Skjulte ark (<code>xlSheetVeryHidden</code>, selvhelbredende)</h4>
+  <p>Opprettes ved behov og skjules ubetinget. Kildene er ikke helt enige om <code>Log</code>-arket: overleveringen sier VeryHidden for alle tre; en eldre statusnotis (v2.3.0) sier <code>xlSheetHidden</code> (kan hentes fram via høyreklikk på arkfane). Lag ikke antagelser; sjekk <code>GetLogSheet</code>.</p>
+  <table>
+    <thead><tr><th>Ark</th><th>Innhold</th></tr></thead>
+    <tbody>
+      <tr><td><code>NettskjemaKoblinger_Hidden</code></td><td>Register. Rad 1 = overskrifter; kolonne A..F: <code>FormId</code>, <code>SheetName</code>, <code>TableName</code>, <code>ClientId</code>, <code>SistOppdatert</code>, <code>AntallSvar</code> (én rad per tilkobling fra rad 2). Global Client ID: <code>H1="GlobalClientId"</code>, <code>I1</code> = verdi. Global Secret: <code>H2="GlobalClientSecret"</code>, <code>I2</code> = verdi (KLARTEKST). Radtelling bruker <code>Cells(Rows.Count,1).End(xlUp)</code> slik at H:I ikke forstyrrer. (Kolonnen ClientId per rad er en rest fra multi-klient-designet; kun én global klient støttes.)</td></tr>
+      <tr><td><code>NettskjemaKolonner_Hidden</code></td><td>Kolonneinnstillinger: <code>FormId</code>, <code>RawKey</code> (stabil nøkkel: «submissionId», «createdDate», «modifiedDate» eller «Spm_&lt;elementId&gt;»), <code>Synlig</code> (TRUE/FALSE), <code>Alias</code>. RAD-REKKEFØLGE = kolonnerekkefølge i tabellen; append-only (aldri fjernet eller omorganisert).</td></tr>
+      <tr><td><code>Log</code></td><td>Kolonner: Tidspunkt, Operasjon, Form/URL, HTTP status, Forsøk, Resultat, Feilmelding, Antall rader, Varighet (sek). <code>LogEvent</code> skriver en rad og kjører <code>Columns.AutoFit</code> (ellers vises datoen som <code>#####</code>; se <a href="#g-ns-kolonne-for-smal">fallgruve</a>). Ingen rotasjon; arket vokser. «OK»-logging per henting er fjernet (v3.21.0); <code>VerifyAndRepairTable</code> logger kun ved reparasjon; ADVARSEL logges ved 0-rader-svar.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Tabell, navn og kolonner</h4>
+  <ul>
+    <li>Tabellnavn = <code>SanitizeTableName(arknavn) &amp; "_tbl"</code> (tegn A-Z a-z 0-9 _; ledende siffer får «_»). Håkon har omdøpt sine til <code>NS_SK_tbl</code>/<code>NS_DS_tbl</code>.</li>
+    <li>Kolonnerekkefølge: <code>submissionId</code> ALLTID først (UPSERT-nøkkel), så <code>createdDate</code> og <code>modifiedDate</code> (alle tre synlige som standard), så én <code>Spm_&lt;elementId&gt;</code> per ekte spørsmål. <strong>RawKey</strong> er den stabile oppslagsnøkkelen; alias er kun visningsnavn (header-cellen), slik at innstillinger overlever aliasendring.</li>
+    <li>Ved hver henting kalles <code>/elements</code> og ALLE ekte spørsmål (<code>questionId != null</code>; HEADING/TEXT hoppes over) forhåndsregistreres i skjemaets rekkefølge (<code>PreRegisterFormColumns</code>), også forgreinede/ubesvarte spørsmål. Nye spørsmål legges på slutten.</li>
+    <li>Avkrysning/radio: <code>answerOptionIds</code> oversettes til alternativtekst via <code>/elements</code>; flere valg står i EN celle atskilt med «; » (bevisst; IKKE Nettskjemas eksportformat med én kolonne per alternativ). Tomme svar = tom streng; ikke-eksisterende nøkkel = ekte tom celle.</li>
+  </ul>
+
+  <h4>Brukergrensesnitt (v3.22)</h4>
+  <ul>
+    <li>Hovedmeny <code>frmNettskjemaKoblinger</code>: avkrysningsliste (kolonne 0 med glyfer <code>ChrW(9744)</code>/<code>ChrW(9745)</code>, <code>ColumnWidths</code> «24 pt;...»; samme <code>MouseUp</code>/Shift-logikk som Mail-utsender fordi <code>Click</code> aldri fyrer på MSForms ListBox her; se <a href="#g-ns-listbox-click">fallgruve</a>). Fargede knapper: grønn «Oppdater markerte nettskjema», blå «+ Ny tilkobling», turkis «Gå til ark», rød «Fjern tilkobling», lilla «Innstillinger» (øverst til høyre). Gruppert i «Tilkoblinger». Ingen Lukk-knapp. Fjernet i v3.22.1: raden med antall valgt/hjelpetekst/«Velg alle»/«Fjern alle»; listen er høyere.</li>
+    <li>Farge og fet skrift settes i VBA i <code>UserForm_Initialize</code> (<code>StilKnapp</code>), ikke i Designer (<a href="#g-ns-msforms-font-designer">fallgruve</a>).</li>
+    <li><code>frmKolonneInnstillinger</code> åpnes MODALT oppå Innstillinger og lukkes tilbake dit (tidligere feil: <code>cmdKolonner_Click</code> kalte <code>Unload Me</code> på hovedmenyen; se <a href="#g-ns-modal-unload-forelder">fallgruve</a>).</li>
+  </ul>

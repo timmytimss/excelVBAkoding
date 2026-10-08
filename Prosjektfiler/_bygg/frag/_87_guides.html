@@ -1,0 +1,28 @@
+<section id="ref-guides" data-nav="Referanse|Brukerveiledninger (fra Guides)">
+  <h2>Brukerveiledninger</h2>
+  <p class="lead">Innholdet fra den gamle <code>Excel Macro Installer\Guides\</code>-mappen, som tømmes og slettes når hele EMI-mappen flyttes til sitt nye sted. Tre filer lå der: <code>README.md</code> (EMI selv), <code>Kontaktsentralen - brukerveiledning.md</code> (sluttbruker-guide) og <code>Kontaktsentralen - overlevering.md</code> — sistnevnte er den samme fullstendige tekniske overleveringen som allerede er hovedkilden for hele <a href="#mac-kontaktsentralen">Kontaktsentralen</a>-seksjonen over, så den gjentas ikke her.</p>
+
+  <h3>Excel Macro Installer — kortversjon for en førstegangsbruker</h3>
+  <p>(Full teknisk detalj ligger i <a href="#mac-emi">EMI-seksjonen</a>; dette er den enkle, sluttbruker-rettede gjennomgangen fra den gamle README-en.)</p>
+  <ol>
+    <li>Dobbeltklikk <code>Excel Macro Installer.exe</code> (eller bruk snarveien på oppgavelinjen). Vinduet åpnes på fanen «Installerte filer» — filoversikten, ikke makrolisten, er det naturlige startpunktet.</li>
+    <li><strong>«Installerte filer»-fanen:</strong> ett kort per Excel-fil, med filnavn stort øverst og full sti (ikke avkuttet) under. Hver installert makro på den fila vises som egen linje, alltid i samme alfabetiske rekkefølge på tvers av filer. En linje i oransje/fet tekst betyr at <code>Macros\</code>-mappa har en nyere versjon enn det som er installert. Knapper: «+ Legg til fil» (øverst, sporer en ny fil uten å kreve at man har valgt makro ennå), «+ Legg til makro» (på hvert filkort, åpner en liten ikon-meny), «Fjern fil» (fjerner kun sporingen her, rører ikke selve Excel-fila), «Oppdater» (per makrolinje), «Fjern» (ekte avinstallering fra selve arbeidsboken — bekreftes med egen dialog siden det er en reell endring; lagrede innstillinger som plassholder-koblinger røres ikke og gjenbrukes ved senere reinstallasjon).</li>
+    <li><strong>«Makroer»-fanen:</strong> ett kort per makro med ikon, nyeste versjon, sist endret-dato og kort beskrivelse. «Installer/Oppdater» → velg Excel-fil i dialogen → makroens egen installer starter i eget vindu og gjør resten, mens EMI selv forblir åpent for flere installasjoner etter hverandre.</li>
+    <li>Programmets egen versjon vises nederst i vinduet. Stemmer den ikke med <code>.exe</code>-fila på disk (f.eks. rett etter at noen har rekompilert den mens EMI sto åpent), vises et varsel og en «Start på nytt»-knapp.</li>
+  </ol>
+  <div class="callout note">Kjent begrensning (gjelder fortsatt): listen oppdateres KUN når man installerer/fjerner gjennom EMI selv. Kjøres en <code>.ps1</code>-fil direkte utenom programmet, blir registeret ikke oppdatert og kan bli utdatert i forhold til virkeligheten.</div>
+
+  <h3>Kontaktsentralen — feilsøkingstabell for sluttbruker</h3>
+  <p>Full arkitektur og alle tekniske fallgruver ligger i <a href="#mac-kontaktsentralen">Kontaktsentralen-seksjonen</a> og <a href="#ref-gotchas">Kjente fallgruver</a>. Dette er den enkle, symptomrettede feilsøkingstabellen fra den gamle brukerveiledningen — nyttig som en rask førstelinje-sjekk før man går til de tekniske fallgruvene:</p>
+  <table>
+    <thead><tr><th>Problem</th><th>Løsning</th></tr></thead>
+    <tbody>
+      <tr><td>«0 med kategori» etter skann</td><td>Sjekk delt postboks og startpunkt i Innstillinger. Sjekk at e-postene faktisk har kategorier satt i Outlook.</td></tr>
+      <tr><td>En e-post havner i uavklart</td><td>Sjekk at avsenderadressen står i en e-post-kolonne, eller at ID-en står som eget ord i emnet. Match den manuelt i uavklart-vinduet.</td></tr>
+      <tr><td>Kategoriknappene mangler en kategori</td><td>Åpne radsiden mens Outlook kjører, så hentes postboksens kategoriliste på nytt.</td></tr>
+      <tr><td>Ingen kategorier vises i Innstillinger</td><td>Velg postboks først. Kategorier hentes fra postboksens egen masterliste og fra e-postene i den.</td></tr>
+      <tr><td>Rader viser feil status etter sortering</td><td>Trykk Skann nå. Sjekk at radnøkkelen faktisk er unik for hver rad (se <a href="#g-radnummer-som-nokkel">radnøkkel-mekanismen</a>, samme prinsipp som brukes flere steder).</td></tr>
+    </tbody>
+  </table>
+  <p>Andre punkter fra brukerveiledningen som IKKE står andre steder: musehjulet virker ikke i dashbordets liste (dokumentert teknisk i <a href="#ref-gotchas">Kjente fallgruver → Kontaktsentralen</a>, kompensert med søkefelt og tastatur); tastaturnavigasjon (pil opp/ned, PageUp/PageDown, Enter) virker når søkefeltet har fokus, som det får automatisk når dashbordet åpnes eller en rad klikkes; dobbeltklikk en celle i Kontrollkolonnen i selve Excel-tabellen åpner radsiden direkte, som et alternativ til å gå via dashbordet.</p>
+</section>

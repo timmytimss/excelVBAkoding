@@ -1,0 +1,43 @@
+
+  <h3 id="mac-emi-arkitektur">Arkitektur</h3>
+  <h4>Kodeoppbygging (Installer\Excel Macro Installer.ps1, PowerShell 5.1 WinForms, kompilert med ps2exe)</h4>
+  <ul>
+    <li>Hele programmet kjører i én stor try/catch → en uventet feil vises som en vanlig <code>MessageBox</code> i stedet for å forsvinne sporløst (ps2exe med <code>-noConsole</code> har ingen konsoll å vise noe i).</li>
+    <li>FØR noe UI opprettes, helt øverst i skriptet: P/Invoke <code>SetProcessDpiAwarenessContext(-4)</code> (= <code>DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2</code>) + <code>$form.AutoScaleMode = None</code>. Uten dette blir vinduet uskarpt/strukket på høy-DPI-skjermer, se <a href="#g-emi-w6-dpi-awareness">gotcha</a>.</li>
+    <li><strong>Stiløsing:</strong> <code>$PSScriptRoot</code> er TOM i en ps2exe-kompilert exe → bruk <code>[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName</code> i stedet (se <a href="#g-emi-w2-psscriptroot-tom">gotcha</a>). Skriptet sjekker om <code>Macros\</code> og <code>Resources\</code> finnes rett ved siden av denne plasseringen — i så fall er det basismappa (kompilert exe-tilfellet); ellers er basismappa én mappe opp (rå <code>.ps1</code>-testing i <code>Installer\</code>). Samme kildekode fungerer dermed identisk som den ferdige exe-en OG som rå <code>.ps1</code> under testing.</li>
+    <li><strong>Datafunksjoner:</strong> <code>Finn-Versjon</code>, <code>Hent-Makroliste</code> (skanner <code>Macros\*.ps1</code>, sortert; Navn = filnavn uten <code>.ps1</code>; SistEndret = <code>LastWriteTime</code>), <code>Hent-Metadata</code>, <code>Les-InstallertRegister</code> / <code>Skriv-InstallertRegister</code> / <code>Oppdater-InstallertRegister</code> / <code>Fjern-FraInstallertRegister</code>, <code>Hent-KjenteFiler</code> / <code>Lagre-KjentFil</code> / <code>Fjern-KjentFil</code>, <code>Fjern-FilHelt</code>, <code>Fjern-MakroFraFil</code>, <code>Start-MakroMedFil</code>, <code>Velg-ExcelFil</code>.</li>
+    <li><strong>UI-hjelpere:</strong> <code>Ny-BryttLabel</code> (Ny-BryttLabel), <code>Set-RundedeHjorner</code> (Region-klipp; kalles ETTER endelig Width/Height er satt), <code>Ny-PillLabel</code>, <code>Ny-StatusPrikk</code>, <code>Ny-IkonKvadrat</code>, <code>Ny-Knapp</code> (stiler «primaer»/«outline»/«lenke»; auto-bredde via <code>TextRenderer.MeasureText</code>), <code>Hent-MakroIkonSti</code>, <code>Vis-MakroVelger</code> (modal ikon-velger), <code>Test-MakroUtdatert</code>, <code>Hent-IkonBakgrunn</code>, <code>Sett-VersjonToppTekst</code>, <code>Sett-AktivFane</code>, <code>Bygg-FilKort</code>, <code>Last-FilerFane</code> (bygger hele fanen på nytt), <code>Bygg-MakroKort</code>.</li>
+    <li><strong>Egendefinert fane-stripe:</strong> native <code>TabControl</code> er ERSTATTET helt (mockup-stil, flatt utseende) med Labels + et understrek-panel, styrt av <code>Sett-AktivFane</code>. To fanepaneler (<code>$pnlFaneFiler</code> = standard/venstre, <code>$pnlFaneMakroer</code>), hver med sin egen <code>FlowLayoutPanel</code> (<code>AutoScroll</code>).</li>
+    <li>Fargepalett i <code>$script:Farge*</code>-variabler (primær-indigo, mutede gråtoner, statusfarger) — se konkrete verdier i designbeslutninger-avsnittet.</li>
+  </ul>
+
+  <h4>Knapplogikk (nøyaktig)</h4>
+  <ul>
+    <li><strong>«Installer/Oppdater» og «Legg til makro»</strong> → <code>Start-MakroMedFil</code>: starter en HELT NY, ASYNKRON prosess og fortsetter selv umiddelbart (EMI forblir brukbar mens installasjonen kjører i sitt eget vindu):
+<pre><code>Start-Process powershell.exe -ArgumentList @(
+    "-ExecutionPolicy", "Bypass",
+    "-File", ('"' + $Makro.Sti + '"'),
+    "-Path", ('"' + $FilSti + '"')
+)</code></pre>
+    Rett etter <code>Start-Process</code> logges installasjonen OPTIMISTISK i <code>installed-files.json</code> med en gang (<code>Oppdater-InstallertRegister</code>) — EMI får ALDRI vite om den eksterne installasjonsprosessen faktisk lyktes, den bare antar det.</li>
+    <li><strong>«Fjern»</strong> (ekte avinstallering) → <code>Fjern-MakroFraFil</code>: samme <code>.ps1</code>, men med <code>-Path</code> OG <code>-Uninstall</code>, kjørt SYNKRONT (<code>-Wait -PassThru</code>) siden avinstallering er raskt og trenger ingen dialogvinduer, og EMI MÅ vite at det faktisk lyktes før registerraden fjernes:
+<pre><code>$proc = Start-Process powershell.exe -ArgumentList @(
+    "-ExecutionPolicy", "Bypass",
+    "-File", ('"' + $Makro.Sti + '"'),
+    "-Path", ('"' + $FilSti + '"'),
+    "-Uninstall"
+) -Wait -PassThru</code></pre>
+    Registerraden fjernes (<code>Fjern-FraInstallertRegister</code>) KUN hvis <code>$proc.ExitCode -eq 0</code>. Ved annen exit-kode vises en <code>MessageBox</code> med feilkoden og en henvisning til konsollvinduet som åpnet seg.</li>
+    <li><strong>«Fjern fil»</strong> → <code>Fjern-FilHelt</code>: fjerner bare sporing i <code>known-files.json</code> og alle registerrader for fila (<code>Fjern-KjentFil</code> + filtrert <code>Skriv-InstallertRegister</code>). Rører ALDRI selve Excel-fila. Leser registeret med <code>-MeldFraOmFeil</code> først og avbryter stille hvis <code>$script:sisteLesingOk</code> er <code>$false</code> (samme datatap-vern som ved vanlig oppdatering, se dataformater under).</li>
+    <li>Registeret skrives KUN av EMI selv, aldri av de enkelte makro-<code>.ps1</code>-ene. Kjører man en <code>.ps1</code> direkte utenom EMI, blir registeret utdatert (kjent begrensning, nevnt også under bruk).</li>
+  </ul>
+
+  <h4>Dataformater</h4>
+  <ul>
+    <li><strong><code>Data\macro-metadata.json</code>:</strong> ett JSON-objekt keyet på makronavn (= filnavn uten <code>.ps1</code>; bindestrek i navnet er ok, slås opp dynamisk via <code>$obj.($navn)</code>):
+<pre><code>{ "Mail-utsender": { "Beskrivelse": "…", "Ikon": "icon-mailutsender.ico" }, … }</code></pre>
+    Mangler en makro sin oppføring her, vises bare «Ingen beskrivelse tilgjengelig ennå.» og standardikonet <code>icon.ico</code>. Filen leses ved oppstart — en ny beskrivelse/nytt ikon krever INGEN rekompilering av EMI, bare en omstart av programmet. Har nå 5 oppføringer (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter, Makromeny).</li>
+    <li><strong><code>Data\installed-files.json</code>:</strong> et array av objekter <code>{ "Fil": "&lt;full sti til .xlsm&gt;", "Makro": "&lt;navn&gt;", "Versjon": "x.y.z", "Tidspunkt": "yyyy-MM-ddTHH:mm:ss" }</code>, upsert på nøkkelparet (Fil, Makro). Dette er Håkons EGET register med ekte rader (bl.a. Hovedarbeidsboken.xlsm med flere installerte makroer) — <strong>aldri tøm/reset dette for testing</strong>; les det først, eller test kun mot en isolert kopi i scratchpad.</li>
+    <li><strong><code>Data\known-files.json</code>:</strong> ren JSON-array av stier (strenger), lagt til via «+ Legg til fil». Kortlisten i «Installerte filer»-fanen er unionen av <code>known-files.json</code>-stiene og de distinkte <code>Fil</code>-verdiene i <code>installed-files.json</code>; en fil som bare finnes i <code>known-files.json</code> («known-only») vises med header + «+ Legg til makro»-knapp men uten makrolinjer.</li>
+    <li><strong>Robust skriving:</strong> <code>ConvertTo-Json</code> på en <code>List[object]</code> MÅ gå via <code>.ToArray()</code> (se <a href="#g-emi-p4-convertto-json-list">gotcha</a>) — ellers «Argumenttypene samsvarer ikke». <strong>Robust lesing:</strong> 5 forsøk × 150 ms + et flagg <code>$script:sisteLesingOk</code>; <code>Oppdater-InstallertRegister</code> NEKTER å skrive noe i det hele tatt hvis forrige lesing ikke ble verifisert OK. Dette fikser en reell datatapsbug fra v2.1.1.0: en OneDrive-synklås kunne tidligere gi et falskt «tomt register» som så ble skrevet tilbake — ekte, permanent datatap for Håkons rader. Se <a href="#g-emi-p9-stille-catch-datatap">full gotcha</a>.</li>
+  </ul>

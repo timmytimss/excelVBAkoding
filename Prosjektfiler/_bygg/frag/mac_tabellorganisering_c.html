@@ -1,0 +1,43 @@
+  <h3 id="mac-tabellorganisering-historikk">Funksjoner og versjonshistorikk</h3>
+  <table class="hist">
+    <thead><tr><th>Versjon</th><th>Hva</th></tr></thead>
+    <tbody>
+      <tr><td>1.0.0</td><td>Eneste kjente versjon. Full installer/oppdaterer-modul med kolonneflytting/-omdøping/-formatering by name, kategorirad med auto- eller <code>tblKategorier</code>-styrte farger, valgfritt per-kolonne tallformat/justering fra <code>tblOppsett</code>. Ingen tidligere eller senere versjonshistorikk funnet i kildene.</td></tr>
+    </tbody>
+  </table>
+  <p>Det tverrgående prosjektminnet (memory-fil, oppdatert 2026-09-16) bekrefter status som «under bygging, v1.0.0, fortsatt stadium 1 (lokalt), ikke lagt til Excel Macro Installer ennå» — samsvarer med versjonsmarkøren i koden.</p>
+
+  <h3 id="mac-tabellorganisering-design">Designbeslutninger og hvorfor</h3>
+  <ul>
+    <li><strong>Kolonner identifiseres alltid ved navn, aldri ved fast bokstav/indeks.</strong> Direkte begrunnet i <code>.txt</code>-utkastet (avsnitt 2): hardkodet <code>Columns("A").Cut</code>-stil kode er sårbar fordi tabellen kan flyttes, kolonner kan legges til/fjernes, rekkefølgen kan endres manuelt, og tabellen kan starte i en annen kolonne. Den faktiske koden følger dette gjennomgående — også for selve <code>tblOppsett</code>s egne kolonner, via <code>OppsettKolonneIndeks</code>, som går lenger enn utkastets opprinnelige forslag om faste celleoffsett.</li>
+    <li><strong>Flytt kolonner før du endrer navn.</strong> Eksplisitt «VIKTIG»-merknad i <code>.txt</code>-utkastet (avsnitt 15): gjøres det i motsatt rekkefølge kan et nytt navn kollidere med et annet gammelt navn, senere oppslag kan mislykkes, og makroen kan miste koblingen til originalnavnet. Koden følger denne rekkefølgen (<code>OrganiserKolonner</code> før <code>EndreKolonnenavn</code>). Se <a href="#g-flytt-for-omdop">gotcha</a>.</li>
+    <li><strong>Kategorifarger konfigurerbare via <code>tblKategorier</code> i stedet for hardkodet i VBA.</strong> <code>.txt</code>-utkastets opprinnelige <code>KategoriFarge</code>-funksjon (avsnitt 21) hardkodet <code>Select Case</code> per kategorinavn (KUNDEINFORMASJON, SALG, OPPFØLGING, ØKONOMI, PRODUKT, LOGISTIKK). Avsnitt 33 i samme dokument foreslo en konfigurerbar <code>tblKategorier</code>-tabell som en <em>fremtidig</em> forbedring («Da blir hele utseendet konfigurerbart uten VBA-endringer») — den faktiske koden har allerede bygget denne forbedringen fra dag én, med auto-palett som fallback for kategorier uten eksplisitt farge.</li>
+    <li><strong>Per-kolonne format/justering fra konfigurasjon, ikke hardkodede kolonnenavn.</strong> <code>.txt</code>-utkastets <code>FormaterSpesialkolonner</code> (avsnitt 26) var et eksempel med to hardkodede navn («Beløp», «Dato»), presentert som et forslag til <em>senere</em> utvidelse (avsnitt 25). Den faktiske koden implementerer allerede den generaliserte varianten via valgfrie <code>Format</code>/<code>Justering</code>-kolonner i <code>tblOppsett</code>.</li>
+    <li><strong>Application.Caller for å finne riktig ark.</strong> <code>.txt</code>-utkastet nevnte dette som en mulig senere utvidelse for flere-knapper-scenarier (avsnitt 28). Faktisk kode bruker det allerede i <code>OrganiserTabell</code>, men uten den mer avanserte «nærmeste tabell»-logikken fra avsnitt 29 (se Åpne punkter) — koden krever i stedet nøyaktig én tabell på arket.</li>
+    <li><strong>Enkel Cut+Insert for kolonneflytting, ikke array-ombygging.</strong> <code>.txt</code>-utkastet selv advarer (avsnitt 13–14) om at <code>Range.Cut</code>/<code>Insert</code> kan være skjørt for tabeller med formler, strukturerte referanser, Power Query eller pivottabeller, og anbefaler for produksjon en tryggere variant (les hele tabellen til minne, bygg mapping gammel→ny indeks, skriv data kontrollert tilbake, gjenopprett format/datatyper/formler). Den faktiske koden har <strong>ikke</strong> bygget denne sikrere varianten — den bruker fortsatt den enkle Cut/Insert-metoden fra avsnitt 13. Se <a href="#g-cut-insert-risiko">gotcha</a> og Åpne punkter.</li>
+    <li><strong>Forkastet/utsatt retning: rollback/snapshot.</strong> <code>.txt</code>-utkastet (avsnitt 31) foreslo å ta et «snapshot» av header-navn, kolonnerekkefølge, data og kategorirad før kjøring, med gjenoppretting ved feil — særlig nyttig i kritiske arbeidsbøker. Ikke bygget; feilhåndteringen i dagens kode gjenoppretter kun Excel-innstillinger (ScreenUpdating/Events/Calculation), ikke selve arkets innhold.</li>
+  </ul>
+
+  <h3 id="mac-tabellorganisering-test">Testing av denne makroen</h3>
+  <div class="callout warn">Ingen dokumentert testing av denne makroen finnes i kildene — verken installasjonssykluser, kastefiler eller verifiserte kjøringer. Dette avsnittet er derfor kort med vilje: ingenting skal dikters opp. De generelle EMI-konvensjonene (aldri lagre brukerens fil unødig, <code>-Uninstall</code> fjerner kun egne eksakt navngitte komponenter, test alltid i egne kastefiler — aldri Hovedarbeidsboken eller andre ekte filer) gjelder som for alle andre makroer, men ingen faktisk testøkt for akkurat Tabellorganisering er dokumentert.</div>
+
+  <h3 id="mac-tabellorganisering-apent">Åpne punkter, begrensninger og idéer</h3>
+  <h4>Åpne punkter og begrensninger (bygget kode)</h4>
+  <ul>
+    <li>Ikke lagt til Excel Macro Installer ennå — mangler ikon, <code>macro-metadata.json</code>-oppføring og plassering i <code>Macros\</code>.</li>
+    <li>OnAction for knappen er ukvalifisert (<code>"OrganiserTabell"</code>), uten <a href="#g-crossworkbook-onaction">cross-workbook-fiksen</a> som de fem andre EMI-makroene fikk — risiko for feil kobling ved flere åpne arbeidsbøker samtidig ved installasjon.</li>
+    <li>Kolonneflytting bruker fortsatt den enkle Cut/Insert-metoden, som <code>.txt</code>-utkastet selv flagger som skjør for tabeller med formler, strukturerte referanser, Power Query eller pivottabeller. Den tryggere array-baserte varianten fra utkastet er ikke bygget.</li>
+    <li>Krever nøyaktig én tabell på arket (feilmelding ved 0 eller &gt;1) — ingen støtte for flere tabeller per ark eller «nærmeste tabell fra knappens posisjon»-logikk.</li>
+    <li>Ingen rollback/snapshot ved feil — kan i verste fall etterlate en halvferdig layout hvis noe feiler midtveis (selve Excel-innstillingene gjenopprettes, men ikke arkets innhold).</li>
+    <li>Ingen ekte installasjon eller test i en reell arbeidsbok dokumentert.</li>
+  </ul>
+  <h4>Idéer/planlagt fra <code>Tabellorganisering.txt</code> (konsulent-stil plan — planlagt, ikke bygget)</h4>
+  <p>Dokumentet er en anbefalings-/planrapport (avsnitt 1–41), ikke ferdig kode. Utover det som er dekket i Designbeslutninger over, foreslår det følgende som eksplisitt fremtidig arbeid:</p>
+  <ul>
+    <li><strong>Versjon 2-idéer</strong> (avsnitt 38): støtte for flere tabeller per ark, flere layoutprofiler, dropdown for valg av profil, egen valideringsknapp, resett-knapp, underkategorier, kolonnebredder fra oppsett, skjuling av kolonner, tall-/datoformat fra oppsett (delvis dekket av Format/Justering-kolonnene som faktisk er bygget), logging, rollback, dynamisk knappestyring, støtte for flere datakilder.</li>
+    <li><strong>Versjon 3-idé</strong> (avsnitt 39): en UserForm med valg av tabell, valg av layout, forhåndsvisning, avkrysningsbokser for hvilke steg som skal kjøres (sorter kolonner/endre navn/lag kategorier/bruk farger/autofit), knappene «Kjør» og «Tilbakestill».</li>
+    <li><strong>Underkategorier</strong> (avsnitt 34): to-nivås kategoristruktur (Hovedkategori → Underkategori → Kolonne), som ville gi to visuelle rader over tabellen i stedet for én.</li>
+    <li><strong>Praktiske spørsmål utkastet selv reiser før reell bruk</strong> (avsnitt 40, ubesvart i kildene): Inneholder tabellen formler? Brukes strukturerte referanser andre steder? Brukes tabellen av pivottabeller eller Power Query? Finnes flere tabeller i samme ark? Skal ukjente/ekstra kolonner beholdes eller fjernes/legges bakerst? Skal kategoriraden få overskrive eksisterende innhold? Skal tabellen kunne reverseres? Skal brukeren kunne endre fargene selv?</li>
+    <li><strong>Anbefalt modulstruktur</strong> utkastet foreslo (avsnitt 36) delte den planlagte koden i <code>Module_Main</code>, <code>Module_Config</code>, <code>Module_Columns</code>, <code>Module_Categories</code>, <code>Module_Formatting</code>, <code>Module_Utilities</code> — den faktiske koden samler i stedet alt i én modul, <code>modTabellorganisering</code>.</li>
+  </ul>
+</section>

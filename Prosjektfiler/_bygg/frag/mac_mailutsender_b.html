@@ -1,0 +1,49 @@
+  <h3 id="mac-mailutsender-arkitektur">Arkitektur</h3>
+  <h4>Installer-fil og bygging</h4>
+  <p><code>Mail-utsender.ps1</code> (UTF-8 <strong>med BOM</strong>, ~3300 linjer, 138 kB) er en selvstendig installer/oppdaterer. <code>param()</code>: <code>[string]$Path</code>, <code>$Mappe</code> (kun startmappe for filvelger-dialogen), <code>$MalSti</code>/<code>$MalUndermappe</code>/<code>$MalFilnavn</code> (valgfri script-seeding av malen — ingen egen dialog for dette lenger), <code>[switch]$Force</code>, <code>[switch]$Uninstall</code>. Linje 17: <code>$GeneriskVersion = "0.18.9"</code> (denne verdien leses av EMI). Fem heredocs med VBA-kildekode: <code>$moduleCodeTemplate</code> (→ standardmodulen «modGenerisk», der <code>{{VERSION}}</code> byttes ut med den faktiske <code>Public Const GENERISK_VERSION</code>), <code>$formCodeSendMail</code>, <code>$formCodeOppsett</code>, <code>$formCodeMasseSend</code>, <code>$formCodeFeilsjekk</code>.</p>
+  <p><strong>Installasjonsflyt:</strong> BOM-sjekk → ALLTID en <code>OpenFileDialog</code> (aldri automatisk gjenfinning av mål-fil — <code>-Path</code> finnes for scriptede kjøringer) → koble til Excel via COM (<code>GetActiveObject("Excel.Application")</code> gjenbruker en allerede åpen instans, ellers opprettes en ny) → duplikat-sjekk (samme fil åpen to ganger, vises som «Bok.xlsm:2» i Workbooks-samlingen) → sjekk av VBA-prosjekt-tilgang (Trust Center) → egen gren for <code>-Uninstall</code> → versjonssjekk (leser <code>GENERISK_VERSION</code> fra den installerte <code>modGenerisk</code>; lik versjon og ikke <code>-Force</code> ⇒ installeren hopper stille over) → skjemaene bygges i en midlertidig arbeidsbok via <code>Designer.Controls.Add("Forms.Frame.1"</code> osv.<code>)</code>, eksporteres til <code>.frm</code>, importeres i målfila (gamle komponenter fjernes først), med <code>Start-Sleep</code> 400–500 ms mellom hvert steg (se <a href="#g-com-instability-cycles">COM-ustabilitet</a>) → seeder <code>MAL_UNDERMAPPE</code>/<code>MAL_FILNAVN</code> i <code>MailKonfig</code> KUN hvis de er tomme fra før → finner-eller-lager arkknappen → skriver en påminnelse om Ctrl+S i konsollet.</p>
+
+  <h4>Nøkkelkontroller per skjema</h4>
+  <ul>
+    <li><strong><code>frmSendMail</code></strong>: <code>lstRader</code>, fire fargede stat-labels (<code>lblStat*</code>), <code>lblVedlegg</code>, <code>lblLevering</code>, <code>cmdOppsett</code>, <code>cmdSendMail</code>, <code>cmdFeilsjekk</code>, <code>cmdSendTilAlle</code> (intern navn beholdt selv om caption ble endret til «Send til flere» — se versjonshistorikk 0.16.x).</li>
+    <li><strong><code>frmOppsett</code></strong>: <code>fraMalfil</code>, <code>fraPlassholdere</code>, <code>fraEpostStatus</code> (inkl. <code>cboCC</code>), <code>fraAvsender</code>, <code>fraLevering</code>, <code>cmdLagre</code>, <code>cmdTilbake</code>.</li>
+    <li><strong><code>frmMasseSend</code></strong>: <code>lstMailer</code> (multikolonne-liste med avkrysningsglyf i kolonne 0, <code>MultiSelect=fmMultiSelectExtended</code>), <code>lblHint</code>, <code>lblAntallValgt</code>, <code>lblMarkerX</code>/<code>txtMarkerX</code>/<code>cmdMarkerX</code>, <code>cmdVelgAlle</code>/<code>cmdFjernAlle</code>, ramma <code>fraForhandsvisning</code> med <code>txtPrevEmne</code>/<code>Til</code>/<code>Fra</code>/<code>CC</code>/<code>Brodtekst</code>/<code>Vedlegg</code>, <code>lblStatus</code>, <code>cmdOppsett</code>, <code>cmdLukk</code> (viser teksten «Tilbake»), <code>cmdFeilsjekk</code>, <code>cmdSendTilAlle</code>.</li>
+    <li><strong><code>frmFeilsjekk</code></strong>: <code>lstFeil</code>, <code>cmdForrige</code>/<code>cmdGaTil</code>/<code>cmdNeste</code>/<code>cmdLukk</code>.</li>
+  </ul>
+
+  <h4>Nøkkelprosedyrer i <code>modGenerisk</code></h4>
+  <ul>
+    <li><code>LesKonfig</code>/<code>SkrivKonfigVerdi</code> — leser/skriver <code>MailKonfig</code> via en <code>Scripting.Dictionary</code>.</li>
+    <li><code>FinnPlassholdere</code> — returnerer en <code>Collection</code> (bevisst ikke array, se <a href="#g-dual-array-return">dual-array-return</a>).</li>
+    <li><code>AktivTabell</code>, <code>KolonneNr</code>, <code>SynligeKolonneIndekser</code> (respekterer skjulte kolonner, se v0.10.0).</li>
+    <li><code>RessursMappe</code>, <code>MalSti</code>, <code>LokalStiFraSky</code> (+ <code>DekodUrlTegn</code>) — OneDrive-URL→lokal sti via registeret, se <a href="#g-onedrive-url-sti">V13</a>.</li>
+    <li><code>MailUtsendelse</code> (selve inngangspunktet fra arkknappen), <code>VisOppsett</code>, <code>HentOutlookApp</code>, <code>SettAvsender</code>.</li>
+    <li><code>HentVedleggsliste</code>/<code>VedleggTekst</code>/<code>LeggVedVedlegg</code> — én sannhetskilde for hva som vedlegges, brukt både i visning og faktisk vedlegging (kan aldri drifte fra hverandre).</li>
+    <li><code>BeregnLeveringstidspunkt</code>/<code>LeveringsBeskrivelse</code>/<code>AvsenderBeskrivelse</code>.</li>
+    <li><code>FinnManglendeData</code> — finner tomme celler i plassholder-koblede kolonner på rader som HAR en e-postadresse; returnerer én <code>Scripting.Dictionary</code> (<code>RadNr</code>/<code>KolNr</code>/<code>Plassholder</code>/<code>KolonneNavn</code>) per funn.</li>
+    <li><strong><code>BygMailForRad</code></strong> — den DELTE byggelogikken brukt av både enkeltsending og «Send til flere»: validering → <code>CreateItemFromTemplate</code> → <code>Replace</code> i <code>Subject</code>+<code>HTMLBody</code> → sjekk av ukoblet plassholder → setter To/CC → avsender → vedlegg → <code>DeferredDeliveryTime</code>. Returnerer <code>False</code> + en feilmeldingsstreng ved problemer, viser ALDRI en MsgBox selv (en masse-løkke kan ikke poppe N dialoger). Fordi begge sendeflyter bruker denne ene funksjonen, gjelder alle sikkerhetssjekker (ukoblet plassholder, manglende fil) likt for begge.</li>
+    <li><code>SendMailForRad</code> — tynn wrapper rundt <code>BygMailForRad</code> for enkeltflyten: kaller <code>.Display()</code>, og gjenoppretter <code>HTMLBody</code> og <code>DeferredDeliveryTime</code> etterpå (se <a href="#g-display-nullstiller-signatur">O2</a>).</li>
+    <li>Public modulnivå-tilstand: <code>OppsettReturnerTil</code>, <code>FeilsjekkReturnerTil</code> — hvilket skjema Lagre/Tilbake/Lukk skal navigere tilbake til.</li>
+  </ul>
+
+  <h4>Skjult ark MailKonfig</h4>
+  <p><code>xlSheetVeryHidden</code>, kolonner «Nokkel»/«Verdi». Dette er eneste sannhetskilde for konfigurasjon — installeren seeder BARE mal-nøklene ved fersk installasjon og overskriver aldri eksisterende innstillinger ved oppdatering.</p>
+  <table class="hist">
+    <thead><tr><th>Nøkkel</th><th>Betydning</th></tr></thead>
+    <tbody>
+      <tr><td><code>MAL_UNDERMAPPE</code>, <code>MAL_FILNAVN</code></td><td>Relativ sti til mal-fila (.msg), regnet ut fra arbeidsbokas mappe.</td></tr>
+      <tr><td><code>KOL_EPOST</code>, <code>KOL_STATUS</code>, <code>KOL_CC</code></td><td>Valgte kolonnenavn. <code>KOL_CC</code> skrives ALLTID (også tom — en tom verdi betyr «ingen CC», ikke «ikke satt opp ennå»).</td></tr>
+      <tr><td><code>PH:&lt;bokstaver&gt;</code></td><td>Én nøkkel per koblet plassholder, f.eks. <code>PH:AAA</code> → kolonnenavnet den er koblet til.</td></tr>
+      <tr><td><code>AVSENDER:&lt;epost&gt;</code></td><td>Lagret avsenderadresse (én nøkkel per lagret adresse, samme prefiks-mønster som <code>PH:</code>).</td></tr>
+      <tr><td><code>AVSENDER_VALGT</code></td><td>Hvilken avsender som er valgt akkurat nå.</td></tr>
+      <tr><td><code>LEVERING_TYPE</code></td><td><code>MED_ENGANG</code> | <code>MINUTTER</code> | <code>TIDSPUNKT</code>.</td></tr>
+      <tr><td><code>LEVERING_MINUTTER</code></td><td>Antall minutter, når type er <code>MINUTTER</code>.</td></tr>
+      <tr><td><code>LEVERING_DAG</code>, <code>LEVERING_MANED</code> (1–12), <code>LEVERING_AAR</code></td><td>Bestemt dato, tre separate nøkler (ikke én kombinert datonøkkel — se designbeslutninger for hvorfor).</td></tr>
+      <tr><td><code>LEVERING_KLOKKESLETT</code></td><td>Format «hh:mm».</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Arkknapp og avinstallering</h4>
+  <p>Arkknappen er en Form Control med caption «Mail-utsender», <code>OnAction</code> satt KVALIFISERT mot arbeidsboka (<code>'&lt;arbeidsbokNavn&gt;'!MailUtsendelse</code> — se <a href="#g-onaction-feilbinding">V15</a>) og <code>Placement=3</code>. Selvhelbredende: finn-eller-lag, og Caption settes UBETINGET hver kjøring (unngår at en gammel, halvveis mislykket installasjon står igjen med Excels standardtekst «Knapp 1»). En eldre «VisOppsett»-knapp fra tidligere versjoner slettes ved oppdatering. Det finnes IKKE noen generell opprydding av «tomme»/ukjente knapper — en slik opprydding slettet en gang Kolonnevelgers knapp ved et uhell, se <a href="#g-blanket-ui-cleanup">C6</a>.</p>
+  <p><code>-Uninstall</code> fjerner eksakt <code>modGenerisk</code>/<code>frmSendMail</code>/<code>frmOppsett</code>/<code>frmMasseSend</code>/<code>frmFeilsjekk</code> pluss knapper med eksakt matchende <code>OnAction</code> (søker gjennom ALLE ark i boka), lar <code>MailKonfig</code> stå urørt (en reinstallasjon gjenbruker dermed innstillingene), kaller <code>wb.Save()</code>, og avslutter med kode 0 ved suksess / 1 ved feil.</p>
+  <div class="callout warn"><p><strong>Versjonsmarkør-regelen gjelder absolutt:</strong> <code>$GeneriskVersion</code> MÅ økes ved HVER kodeendring i det installeren genererer. Uten bump hopper installeren stille over — ingen feilmelding, ingenting skjer, selv om koden faktisk er endret. Se <a href="#g-installer-hopper-over-lik-versjon">C5</a>.</p></div>

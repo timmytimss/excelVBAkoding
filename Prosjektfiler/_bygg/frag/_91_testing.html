@@ -1,0 +1,266 @@
+<section id="ref-testing" data-nav="Referanse|Testteknikker">
+  <h2>Testteknikker</h2>
+  <p class="lead">Generelle, gjenbrukbare metoder for trygg testing av Excel/VBA/Outlook-automasjon uten å røre Håkons ekte filer eller postboks — utviklet på tvers av alle modulene.</p>
+  <div class="callout note"><strong>Oppdatert testfil-praksis (2026-09-22):</strong> teknikkene under ble utviklet mot ferske, éngangs «kastefiler» som ble laget og slettet for hver testrunde — dette var datidens standard, men oppleves tungvint i lengden. Foretrukket praksis fremover: ha noen få VARIGE testfiler i <code>Prosjektfiler\Testfiler\</code> som gjenbrukes gang på gang (flere filer for ulike scenarioer er fint — poenget er varighet per fil, ikke antall filer). Se <a href="#arbeidsprosess-testfiler">Testfil-filosofi</a>. Selve installer-/kompileringssjekk-teknikkene under er fortsatt gyldige — bare bytt ut «lag en ny kastefil» med «bruk en eksisterende testfil» der det står.</div>
+  <details class="acc" open><summary>Excel Macro Installer (EMI)</summary><div>
+<div class="technique" id="t-emi-isolert-logikktest">
+  <h4>Test logikkfunksjoner isolert som ren PowerShell, uten GUI</h4>
+  <p>Kjør EMI-kildens datafunksjoner (<code>Les-InstallertRegister</code>, <code>Oppdater-InstallertRegister</code>, <code>Hent-Makroliste</code>, <code>Finn-Versjon</code> osv.) direkte fra en test-.ps1 som dot-sourcer eller kopierer inn de aktuelle funksjonene, uten å bygge noe WinForms-vindu i det hele tatt. Dette er hvordan de to farligste EMI-buggene faktisk ble funnet: <a href="#g-emi-p3-tom-liste-unrolles">unroll-bugen</a> (tom/ett-elements <code>List[object]</code> som ble <code>$null</code>) og <a href="#g-emi-p4-convertto-json-list">JSON-bindingsbugen</a> (<code>ConvertTo-Json</code> på en ekte generisk List). Verifiser «nekt å skrive»-grenen i <a href="#g-emi-p9-stille-catch-datatap">datatap-fiksen</a> ved bevisst å ødelegge en KOPI av registerfilen og bekrefte at (a) funksjonen returnerer «AVBRUTT — skrev IKKE» og (b) den korrupte filens innhold er helt urørt etterpå — aldri test mot ekte registerdata.</p>
+</div>
+
+<div class="technique" id="t-emi-enumwindows-probe">
+  <h4>EnumWindows-probe: bekreft ett rent vindu, ingen konsoll</h4>
+  <p>Etter hver kompilering av EMI: start den ferske .exe-en og bruk en <code>EnumWindows</code>/<code>EnumChildWindows</code>-probe (P/Invoke, filtrert på prosessens PID) til å bekrefte at det finnes NØYAKTIG ETT synlig vindu (selve WinForms-vinduet) og INGEN konsoll-/Terminal-vindu ved siden av. Dette er den konkrete verifiseringen bak <a href="#g-emi-w1-terminal-problemet">Terminal-problemet</a> — en ren oppstart bekrefter at <code>-noConsole</code>-kompileringen faktisk virket. Lukk vinduet selv etterpå.</p>
+</div>
+
+<div class="technique" id="t-emi-uia-lesing-ikke-klikk">
+  <h4>UI Automation for LESING av WinForms-innhold, ikke for klikking</h4>
+  <p>Les rendret innhold (Name/BoundingRectangle-tre) med <code>System.Windows.Automation</code> på et PID-verifisert vindu — dette fungerer pålitelig for WinForms (tekst, versjon, dato, beskrivelse, kortstørrelser) og er slik avstand mellom kort (bunn-Y på ett kort vs. topp-Y på neste) er bevist med ekte lange beskrivelser/stier, ikke bare korte test-strenger. Se derimot <a href="#g-emi-w8-uia-begrensninger-winforms">UIA-begrensningene</a> for hvorfor faktisk KLIKKING må gjøres annerledes: <code>TabControl</code>-faner vises ikke som <code>TabItem</code>, og <code>Button</code> støtter ikke <code>InvokePattern</code>. For faneskifte: <code>SetForegroundWindow</code> på vinduets handle, deretter <code>[System.Windows.Forms.SendKeys]::SendWait("^{TAB}")</code> (Ctrl+Tab) — pålitelig og krever ingen koordinat-gjetting. For alt annet klikk-drevet: bruk en midlertidig, kjent testverdi (f.eks. en falsk sti i <code>known-files.json</code>) og verifiser resultatet gjennom lesing etterpå, ikke gjennom å stole på at klikket «traff».</p>
+</div>
+
+<div class="technique" id="t-emi-negativ-kontroll">
+  <h4>Kjør alltid en negativ kontroll før du stoler på en «ren» sjekk</h4>
+  <p>En kompileringssjekk eller BOM/syntaks-verifisering (<code>[ScriptBlock]::Create(...)</code>) som aldri er testet mot et KJENT feil tilfelle, kan ikke skilles fra en sjekk som bare aldri finner noe. Bygg en scratchmodul med en kjent, bevisst feil først og bekreft at verktøyet faktisk oppdager den, før du stoler på et «OK»-resultat på ekte kode. Gjelder også kompileringssjekker av de VBA-baserte plugin-makroene EMI installerer (Excel-siden av kompileringen skjer helt separat fra EMIs egen PowerShell-lag-sjekk).</p>
+</div>
+
+<div class="technique" id="t-emi-versjon-og-lasesjekk-rutine">
+  <h4>Fast rutine hver gang før installasjon/kompilering</h4>
+  <p>BOM-sjekk (byte 1–3 = EF BB BF) + <code>[ScriptBlock]::Create((Get-Content -Raw -Encoding UTF8 &lt;kilde&gt;))</code> — validerer kun PowerShell-laget, ikke VBA-en. For EMI spesifikt, i tillegg: grep <code>$LauncherVersion</code>-verdien og bekreft den er lik den <code>-version</code>-strengen som skal brukes i <code>Invoke-ps2exe</code>-kommandoen, RETT FØR hver kompilering (en glemt bump ga tidligere et falskt «ny versjon klar»-banner). Sjekk <code>Get-Process "Excel Macro Installer"</code> og be Håkon lukke programmet hvis det kjører — filen er låst mens den kjører.</p>
+</div>
+
+<div class="technique" id="t-emi-eksterne-installere-uten-a-rore-excel">
+  <h4>Test EMIs plugin-makroer uten å røre Håkons Excel</h4>
+  <p>For å teste hvordan flere av EMIs plugin-makroer (Kolonnevelger, Mail-utsender, Kontaktsentralen, Makromeny, Nettskjema-henter) fungerer sammen i samme arbeidsbok uten å risikere Håkons ekte, åpne Excel: kopiér hver installer-.ps1 til scratchpad og bytt ut <code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code>-kallet med noe som tvinger feilbanen (f.eks. <code>throw 'x'</code>), slik at installeren faller tilbake til <code>New-Object -ComObject Excel.Application</code> — en egen, isolert instans. La instansen stå åpen mellom installasjonene, bind til den med <code>[Marshal]::BindToMoniker(fil)</code>, verifiser komponenter/knapper/ThisWorkbook-blokker etter hver, og lukk kun denne egne instansen (aldri en prosess man ikke selv startet) til slutt.</p>
+</div>
+  </div></details>
+  <details class="acc"><summary>Mail-utsender</summary><div>
+<div class="technique" id="t-com-bridge-tilstand">
+  <h4>Tilstand ut av et åpent skjema via Public Function + standardmodul-bro</h4>
+  <p>Ekstern <code>Application.Run</code>/<code>OnTime</code> støtter ikke punktum-syntaks mot et skjema (<code>Skjema.Metode</code> feiler med «Kan ikke kjøre makroen …», selv når skjemaets standardinstans allerede er lastet og synlig — se <a href="#g-application-run-form-method">gotcha-fila</a>). Løsningen brukt gjennomgående: en midlertidig <code>Public Function</code> på selve skjemaet som returnerer én semikolon-delt tekststreng med relevant tilstand (f.eks. bit-mønster av valgte rader, <code>.ListIndex</code>, kontrollhøyder), pluss en tynn bro-<code>Function</code> i en standardmodul (typisk <code>modGenerisk</code>) som kaller inn i skjemaet og videreformidler returverdien. Kalles utenfra med <code>$xl.Run("Test_LesX")</code>. Et modalt <code>.Show</code> blokkerer IKKE andre eksterne COM-kall inn i samme Excel-instans — meldingspumpen fortsetter å kjøre, så <code>OnTime</code> returnerer umiddelbart selv med et modalt skjema åpent. Fjern ALLE slike bro-funksjoner før endelig innsending av en kodeendring, hver runde, sammen med versjonsbump. ALDRI <code>MsgBox</code> i en mus-hendelse som diagnostikk — det kan korrumpere Windows' egen meldingskø (se <a href="#g-msgbox-in-mouse-handler">gotcha-fila</a>).</p>
+</div>
+
+<div class="technique" id="t-msgbox-breadcrumbs">
+  <h4>Nummererte MsgBox-brødsmuler for å lokalisere en stille feil</h4>
+  <p>For å finne EKSAKT hvor en stille feil oppstår (dvs. ingen feilmelding, bare feil oppførsel — som Unload-Me-navigasjonsbuggen): legg inn nummererte, midlertidige <code>MsgBox</code>-brødsmuler («[DIAGNOSE 1] …», «[DIAGNOSE 2] …» osv.) ved hvert steg i den mistenkte kodestien, og be Håkon rapportere NØYAKTIG hvilke han ser (og i hvilken rekkefølge). Dette er en billig og pålitelig teknikk som har pinnet ned minst én ellers vanskelig bug på én runde, etter flere runder ren kodegjennomgangs-gjetting (inkludert minst én rent feilaktig teori). <strong>Gjelder KUN utenfor mus-hendelser</strong> — inne i en mus-handler er selv én MsgBox risikabel (se <a href="#g-msgbox-in-mouse-handler">gotcha-fila</a>); der må man bruke <a href="#t-com-bridge-tilstand">COM-bro-teknikken</a> i stedet.</p>
+</div>
+
+<div class="technique" id="t-ekte-klikk-vaktet">
+  <h4>Ekte fysisk museklikk, kun med eksplisitt samtykke, med vakt</h4>
+  <p>Reservert for tilfeller der ALT annet (selvtester, PostMessage, COM-tilstandslesing) er uttømt, og brukeren selv eksplisitt ber om og samtykker til det, i én avgrenset økt. Fremgangsmåte: regn punkt→piksel-forholdet EMPIRISK for det aktuelle vinduet der og da (<code>GetClientRect</code>-piksler delt på <code>Me.InsideWidth</code>/<code>InsideHeight</code> i punkter — ikke en antatt fast DPI-konstant); <code>ClientToScreen</code> for å få skjermkoordinater; lagre gjeldende <code>GetCursorPos</code>; <code>SetForegroundWindow</code> (bekreft at det faktisk virket med <code>GetForegroundWindow</code> etterpå); flytt pekeren med <code>SetCursorPos</code> i to–tre steg; klikk med <code>mouse_event</code> (<code>MOUSEEVENTF_LEFTDOWN</code>/<code>_LEFTUP</code>, 100–150 ms mellomrom); Shift simuleres med <code>keybd_event VK_SHIFT</code> ved behov; gjenopprett pekeren til lagret posisjon UMIDDELBART etterpå. Verifiser resultatet med COM-avlesing (se <a href="#t-com-bridge-tilstand">tilstandsbroen</a>), ALDRI med et skjermbilde (se <a href="#g-aldri-skjermbilde-basert">personvernregelen</a>). Denne teknikken var det som til slutt avslørte at <code>ListBox.Click</code> aldri fyrer i det hele tatt — noe ingen selvtest kunne ha vist, siden en selvtest bare kaller handleren direkte og dermed aldri tester om selve hendelsen utløses av en ekte hendelse.</p>
+</div>
+
+<div class="technique" id="t-postmessage-begrensning">
+  <h4>PostMessage-begrensning: oppdaterer utvalg, men utløser ikke VBA-hendelser</h4>
+  <p><code>PostMessage(hwnd, WM_LBUTTONDOWN/UP, …)</code> sendt direkte til et skjemas HWND flytter/oppdaterer native ting som <code>.ListIndex</code> (fordi Windows' egen hit-testing prosesserer meldingen), men utløser IKKE de høyere-nivå VBA-hendelsene (som <code>Click</code>) som MSForms selv skal syntetisere fra de rå museklikkene. Denne teknikken ble derfor forkastet som utilstrekkelig for å teste VBA-klikklogikk — den kan bekrefte at hit-testing fungerer, men kan aldri bekrefte eller avkrefte at en hendelseshandler faktisk kjører. Bruk <a href="#t-ekte-klikk-vaktet">ekte museklikk</a> eller <a href="#t-selvtest-private-handlere">direkte selvtest av handleren</a> i stedet, avhengig av hva man faktisk trenger å bevise.</p>
+</div>
+
+<div class="technique" id="t-selvtest-private-handlere">
+  <h4>Selvtester som kaller private handlere direkte</h4>
+  <p>Å kalle en privat hendelseshandler direkte med kontrollerte parametre (f.eks. <code>lstMailer_MouseUp 1, 1, 5, 0</code>) via en midlertidig bro verifiserer at SELVE LOGIKKEN inni handleren er korrekt for gitte input — men beviser IKKE at den virkelige hendelsen faktisk utløser handleren under ekte bruk. Dette skillet var akkurat det som gjorde at Ctrl/Shift-avkrysningsbuggen kunne se «løst» ut i selvtester over flere forsøk, mens den fortsatt var reelt ødelagt for ekte klikk — avsløringen kom først ved <a href="#t-ekte-klikk-vaktet">ekte museklikk-testing</a>. Bruk selvtester for å verifisere LOGIKK raskt og trygt, men aldri som eneste bevis for at en interaktiv funksjon faktisk virker for en ekte bruker.</p>
+</div>
+
+<div class="technique" id="t-kompileringsfeil-ontime">
+  <h4>Tving frem VBA-kompilering via OnTime, se etter skjult VBE-dialog</h4>
+  <p>PowerShell-syntakssjekk (<code>[ScriptBlock]::Create</code>) validerer kun PowerShell-laget rundt en heredoc — den ser ALDRI inn i selve VBA-koden. VBA kompilerer først når koden faktisk kjøres. Etter hver installasjon: tving en reell kjøring (f.eks. ved å åpne et skjema via <code>Application.OnTime</code>) og se etter en skjult, bak-liggende kompileringsfeildialog («Microsoft Visual Basic for Applications», vindusklasse <code>#32770</code>) via <code>EnumWindows</code> filtrert på Excel-prosessens PID + UI Automation-tekstlesing, i stedet for å anta at fravær av en PowerShell-feil betyr at koden er korrekt.</p>
+</div>
+
+<div class="technique" id="t-testfil-fiktive-data">
+  <h4>Testfil med fiktive data der alle e-poster går til avsenderen selv</h4>
+  <p>Generelt mønster for trygg testing av et verktøy som faktisk kan sende e-post: en dedikert testarbeidsbok med oppdiktede firma-/personnavn og data, der HVER ENESTE rads e-postadresse peker til den som tester selv (ikke en fiktiv, men plausibel ekstern adresse) — dette gjør selv en ekte, utilsiktet <code>.Send()</code> trygt. Minst én rad bør bevisst ha et hull i dataene (f.eks. tom e-post) for å faktisk utløse og verifisere feilsjekk-/advarselslogikken, ikke bare lykkelig-vei-scenarioet. Se Mail-utsenders eget Testfil-oppsett for et konkret eksempel.</p>
+</div>
+
+<div class="technique" id="t-isolert-excel-instans">
+  <h4>Fullstendig separat Excel-instans for isolert testing</h4>
+  <p>Bruk <code>New-Object -ComObject Excel.Application</code> (ikke <code>GetActiveObject</code>) for alt annet enn det aller siste «installer i ekte målfil»-steget, spesifikt for å utelukke enhver mulighet for å krysse inn i brukerens allerede åpne, ekte arbeidsbok — se <a href="#g-shared-excel-instance">gotcha-fila</a> for hele resonnementet og en reell hendelse dette unngår.</p>
+</div>
+
+<div class="technique" id="t-standalone-string-sim">
+  <h4>Simuler fiddly strengmanipulasjon frittstående før den sendes til brukeren</h4>
+  <p>For sti-/strengfikser som er vanskelige å få riktig i ett forsøk (f.eks. VBAs <code>Mid</code>/<code>Left</code>/<code>Right</code>/<code>InStr</code>-logikk for å bygge en lokal filsti fra en sky-URL): reimplementer de eksakte samme kallene frittstående i PowerShell og kjør dem mot REELLE, observerte verdier — FØR en ny gjetning sendes til brukeren for enda en test-runde. Dette var det som til slutt fanget en feil et tidligere, plausibelt utseende forsøk hadde bommet på (se <a href="#g-onedrive-url-sti">OneDrive-sti-gotchaen</a>). Bruk ALDRI <code>Dir()</code> (eller annen kjent upålitelig filsystemfunksjon mot skysynkede stier) som dommer for om en slik fiks faktisk virket.</p>
+</div>
+  </div></details>
+  <details class="acc"><summary>Kontaktsentralen</summary><div>
+<div class="technique" id="t-kontaktsentralen-kompileringssjekk">
+  <h4>Hele-prosjekt kompileringssjekk uten SendKeys</h4>
+  <p>Valider at en hel VBA-prosjekt kompilerer rent, uten å røre en synlig meny: <code>$app.VBE.ActiveVBProject = $wb.VBProject; $app.VBE.CommandBars.FindControl(1, 578).Execute()</code> tilsvarer Debug &gt; Compile VBAProject. Kallet returnerer UMIDDELBART selv om det finnes en feil — det er ingen blokkerende dialog fra <code>Execute()</code> sitt ståsted. Vent derfor ca. 6 sekunder etterpå, og list opp <code>#32770</code>-vinduer (vindusklassen for «Microsoft Visual Basic for Applications»-dialogen) i den aktuelle Excel-prosessens PID via <code>EnumWindows</code>/<code>EnumChildWindows</code> (P/Invoke; PID hentes fra <code>$app.Hwnd</code>). Finnes dialogen, les teksten i den — VBE-kodepanelet har da feillinja markert (<code>$app.VBE.ActiveCodePane.GetSelection</code> + <code>.CodeModule.Lines</code>). Ingen dialog og kontrollens <code>.Enabled</code> går til <code>False</code> = hele prosjektet kompilerer rent. Sett alltid <code>ActiveVBProject</code> til TESTarbeidsboken eksplisitt først, ellers kan feil prosjekt kompileres.</p>
+  <p><strong>Kjør alltid en negativ kontroll først</strong> (en scratch-modul med en kjent, bevisst feil) før du stoler på et «rent»-resultat — de aller første «OK»-resultatene i Kontaktsentralen-arbeidet var uverifiserte fordi ingen så etter selve dialogen. Metoden fanger KUN kompileringsfeil, ikke kjøretidsfeil (se <a href="#g-redim-negativ">ReDim-gotchaen</a>, som bare viser seg ved faktisk kjøring). Helper-skriptet kan lagres som <code>%TEMP%\kts-compile-check.ps1</code> og gjenskapes ved behov (PowerShell-økter deler ikke tilstand, se <a href="#g-powershell-addtype-session">gotcha</a>).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-modeless-show-test">
+  <h4>Modeless Show 0-test av det ekte skjemaet</h4>
+  <p>For å kjøretidsteste et helt skjema (ikke bare kompilere det) uten å blokkere automasjonsøkten: vis det EKTE skjemaet modeless fra en test-Sub i en midlertidig standardmodul, f.eks. <code>frmX.Show 0</code> pakket inn i <code>On Error GoTo Feil</code> som skriver utfallet til en Public modulnivå-streng. Dette kjører den virkelige <code>UserForm_Initialize</code> og alt den kaller, akkurat slik skjemaet faktisk skipes — ikke en hjemmesnekret erstatning. Les resultatet via en SEPARAT <code>Public Function</code> lagt til i SAMME <code>AddFromString</code>-kall som selve test-Suben (se <a href="#g-addfromstring-public-reset">gotcha</a> om hvorfor en senere, separat <code>AddFromString</code> mot samme modul kan nullstille Public-variabler). Skriv gjerne resultater til celler i en ubrukt kolonne (f.eks. Z) og les dem ut derfra ved behov. Kall via <code>Application.Run "'fil.xlsm'!Prosedyre"</code>. Brukt til å verifisere bl.a. dashbord-initialisering (0.4.1), Oppsett-gjenoppretting ved stale konfigverdier (0.4.2), og radliste-sortering (0.7.0).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-test-wrappere">
+  <h4>Injiser Test*-wrapper-Subs for privat skjemalogikk</h4>
+  <p>Privat hendelseslogikk i et UserForms egen kodemodul kan ikke kalles direkte utenfra (se <a href="#g-userform-application-run">gotcha</a>). Løsning: injiser offentlige <code>Test*</code>-wrapper-Subs direkte i skjemaets <code>CodeModule</code> i TESTFILA (ikke i den distribuerte koden), som kaller den private logikken og eksponerer resultatet. Disse wrapperne forsvinner automatisk ved neste <code>-Force</code>-reinstallasjon av testfila, så de trenger ikke ryddes manuelt. Rut alle testkall gjennom en Sub i en STANDARDMODUL (aldri direkte inn i et UserForms modul via <code>Application.Run</code>).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-printwindow-dpi">
+  <h4>PrintWindow-skjermdump med DPI-aware-kall</h4>
+  <p>For synlig layoutsjekk: sett <code>Application.Visible = $true</code> i EGEN, isolert Excel-instans (aldri brukerens), vis skjemaet, og ta et skjermbilde av <code>ThunderDFrame</code>-vinduet med <code>PrintWindow(hwnd, hdc, 2)</code>. Kall <code>SetProcessDPIAware()</code> FØRST i PowerShell-prosessen, ellers klippes/forvrenges bildet fordi vindusrektangelet er DPI-virtualisert. <code>Add-Type</code> for dette trenger <code>-ReferencedAssemblies System.Drawing</code>. Les PNG-en for å verifisere layout. Brukes UTELUKKENDE med oppdiktede/syntetiske data, aldri mot et skjema som kan koble seg til Håkons ekte Outlook-data (se personverndisiplinen under). Dette er en unntaksmetode — foretrukket generell disiplin er tekstbasert tilgjengelighetstre-verifisering fremfor skjermbilder, ekstra strengt for Kontaktsentralen siden den berører ekte postboksinnhold.</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-vaktet-input">
+  <h4>Vaktet ekte tastatur-/museinput mot egne skjemaer</h4>
+  <p>For å teste ekte tastatur-/musinteraksjon (f.eks. rullefelt, pilnavigasjon) mot et EGET skjema: <code>SetForegroundWindow(mittSkjema)</code>, verifiser deretter <code>GetForegroundWindow()</code> og/eller <code>WindowFromPoint</code>-rotvinduet faktisk er mitt eget skjema FØR <code>keybd_event</code>/<code>mouse_event</code> sendes, og gjenopprett markørposisjonen etterpå. Vakten skal ABORTERE input-forsøket hvis Håkons eget vindu ligger oppå — det betyr han er aktivt på skjermen, og eksperimenter skal stoppes da, ikke tvinge forgrunnen. Merk: postede/sendte <code>WM_KEYDOWN</code>/<code>WM_MOUSEWHEEL</code>-meldinger til «F3 Server»-barnevinduet når IKKE frem til MSForms-kontrollene (kontrollene er windowless) — bruk ekte, vaktet input i stedet for postede meldinger når kontrollenes faktiske reaksjon skal verifiseres.</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-ny-excel-instans">
+  <h4>Installer- og testkjøring i egen Excel-instans (-NyExcelInstans)</h4>
+  <p>Kontaktsentralen.ps1 sin egendefinerte testbryter <code>-NyExcelInstans</code> tvinger frem en HELT separat Excel-prosess i stedet for å koble til brukerens kjørende Excel (se <a href="#g-installer-kobler-til-kjorende-excel">gotcha</a>). Bruk den for ALLE testinstallasjoner. Finn egen PID som (prosesser etter kjøring) minus (prosesser før kjøring); bind til den med <code>[Marshal]::BindToMoniker($testFile)</code>; verifiser at <code>$app.Workbooks</code> kun inneholder testfila FØR <code>Quit()</code> kalles, slik at brukerens egen Excel aldri utilsiktet lukkes. I installer-startet instans virker <code>Application.Run</code> (den regnes som klarert), i motsetning til en vilkårlig ny <code>ComObject</code>-instans (se <a href="#g-makroer-deaktivert-automasjon">gotcha</a>).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-savecopyas">
+  <h4>SaveCopyAs i stedet for Save, med FullName-sjekk</h4>
+  <p>Bruk ALLTID <code>Workbook.SaveCopyAs(sti)</code> for å persistere en testfil, ALDRI <code>.Save()</code> (se <a href="#g-save-flytter-onedrive">gotcha</a>). <code>SaveCopyAs</code> feiler hvis målstien er lik en allerede åpen fils sti — lagre til et annet midlertidig filnavn først, lukk uten å lagre (<code>wb.Close $false</code>), og flytt/omdøp kopien til det endelige testfilnavnet etterpå. Sjekk <code>Workbook.FullName</code> etter ENHVER lagringslignende operasjon for å bekrefte at fila fortsatt er i scratchpad og ikke har blitt omdirigert til ekte OneDrive. Husk også at installeren selv ALDRI lagrer målfila ved vanlig install/oppdatering (se <a href="#g-installer-ikke-lagrer-testfil">gotcha</a>) — persister eksplisitt med <code>SaveCopyAs</code> før testing fra en ny prosess.</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-kastefil-oppsett">
+  <h4>Kastefil-oppsett: kort sti, oppdiktede data, gjenbruk</h4>
+  <p>Lag ÉN liten testarbeidsbok med syntetisk/oppdiktet tabelldata (aldri ekte skoledata) via <code>New-Object -ComObject Excel.Application</code> → <code>SaveAs</code> på en KORT sti (f.eks. <code>%TEMP%\kts-kastefil.xlsm</code>, se <a href="#g-saveas-maxpath">gotcha</a>) → <code>Move-Item</code> inn i scratchpad. Gjenbruk SAMME fil gjennom hele byggefasen (installer/oppdater/test gjentatte ganger på samme fil) i stedet for å lage en ny for hver testrunde — det speiler ekte bruk bedre og er mindre churn. Lag bare en ny fil ved korrupsjon eller når et fersk-installasjon-scenario spesifikt skal testes. Ved slutten av en byggefase (Håkons ønske): slett testfil og hjelpeskript fra scratchpad; gjenskap dem (inkludert kompileringssjekk-/input-hjelperne) ved neste økt siden PowerShell-verktøykall ikke deler tilstand (se <a href="#g-powershell-addtype-session">gotcha</a>).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-andre-installere">
+  <h4>Test flere installere sammen uten å røre brukerens Excel</h4>
+  <p>For å verifisere at flere makro-installere (Kolonnevelger, Mail-utsender, Makromeny, Kontaktsentralen) kompilerer og installerer rent SAMMEN i én fil, uten å risikere brukerens kjørende Excel: kopier hver installer til scratchpad og erstatt linjen som henter aktiv Excel (<code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code>) med <code>throw 'x'</code> — installeren faller da automatisk til <code>New-Object -ComObject Excel.Application</code> og lar sin egen Excel-instans stå åpen etterpå. Bind til den med <code>BindToMoniker</code>, kall <code>Save()</code> (KUN på scratchpad-fila) og <code>Quit()</code> før neste installer kjøres — ellers åpner neste instans fila skrivebeskyttet. Verifiser etterpå at forventede komponenter/ark/knapper/ThisWorkbook-blokker faktisk ble installert korrekt (en liten hjelper som lister komponenter, ark, knapper og ThisWorkbook-blokker for en gitt fil er nyttig her).</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-enumwindows-dialog">
+  <h4>EnumWindows-deteksjon av #32770-kompileringsfeildialog</h4>
+  <p>Se <a href="#t-kontaktsentralen-kompileringssjekk">kompileringssjekk-teknikken</a> over for hele mekanismen. I korte trekk: bruk <code>EnumWindows</code>/<code>EnumChildWindows</code> via P/Invoke, filtrert på den aktuelle Excel-prosessens PID (fra <code>$app.Hwnd</code>), for å finne et vindu med klasse <code>#32770</code> og tittel «Microsoft Visual Basic for Applications» — det er selve kompileringsfeil-dialogen. Denne teknikken er også nøkkelen til å skille en «hang pga. reell kompileringsfeil» (se <a href="#g-hang-kompileringsfeil">gotcha</a>) fra andre hang-årsaker: finn dialogen, les teksten i den, og se den markerte feillinja i VBE-kodepanelet.</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-arbeidsdeling">
+  <h4>Arbeidsdeling mellom Claude og Håkon</h4>
+  <p>Claude verifiserer: kompilering (hele prosjektet), logikk på oppdiktede/syntetiske data, og visuell layout (via skjermdump eller tilgjengelighetstre) — alltid uten å røre Håkons ekte Excel-fil eller Outlook-postboks. Håkon klikk-tester selv alt som berører EKTE Outlook/ekte fil: Oppsett-vinduet, faktisk skriving av kategorier til Outlook, fargelesing, og all logikk mot den reelle, delte postboksen. Denne arbeidsdelingen er ikke bare et personvernhensyn — Håkons klikk-testing har GJENTATTE GANGER funnet reelle feil som automatisert testing ikke fanget (ByVal-array-feilen i 0.3.2, ReDim-feilen i 0.4.1, Style=2-combo-krasjet i 0.4.2, tre kompileringsfeil i 0.7.x, undermappe-rotårsaken til «0 kategorier», og laptop-DPI-layoutfeilen i 0.10.4). Oppsett-vinduet og alt som kaller <code>GetObject(, "Outlook.Application")</code> eller lister <code>ns.Folders</code> vises derfor ALDRI via automasjon (ville eksponert Håkons ekte mappenavn); ett unntak ble brukt én gang der de to Outlook-kalllinjene ble midlertidig byttet med <code>Set olApp = Nothing</code> via <code>CodeModule.ReplaceLine</code> i en TESTKOPI før skjemaet ble vist, kun for å verifisere resten av layouten.</p>
+</div>
+
+<div class="technique" id="t-kontaktsentralen-personvernregel">
+  <h4>Absolutt personvernregel for testing</h4>
+  <p>Håkons ordrette instruks (11.09.2026): «Du skal ikke lese personinfo fra excel som Claude. Aldri.» Dette gjelder ALL ekte data — både Excel og Outlook-postboks — ikke bare kontaktdata, men også kolonneoverskrifter og konfigverdier i den ekte fila. Regelen kan ikke omgås ved å delegere til en subagent (en subagent som leser fila er fortsatt Claude som leser den). Trenger man å vite noe om den ekte fila, SPØR Håkon i stedet for å undersøke selv. Skjermbilder Håkon selv sender kan inneholde ekte data: ikke gjengi innholdet, og be ham dekke til navn/e-poster før han sender. Testfiler skal KUN ligge i Claudes egen scratchpad, aldri andre steder i OneDrive. Å skape syntetiske Outlook-mailobjekter for test er i tillegg egen forbudt praksis (se <a href="#g-syntetiske-mailobjekter">gotcha</a>) — ikke fordi det er persondata, men fordi det historisk har skrevet til Håkons ekte postboks ved en feil.</p>
+</div>
+  </div></details>
+  <details class="acc"><summary>Nettskjema-henter</summary><div>
+<div class="technique" id="t-kastefil-livssyklus">
+  <h4>Kastefil: rent gjenskapt scratch-arbeidsbok for hver testrunde</h4>
+  <p>Bruk en dedikert kastefil (i Nettskjema-hentersammenheng: <code>Documents\Claude (lokal)\Nettskjema henter\Kastefil.xlsm</code>), gjenskapt HELT rent før hver testrunde: slett den forrige (om den finnes), <code>Workbooks.Add()</code>, <code>SaveAs(sti, 52)</code> (52 = xlsm-formatkoden), <code>Quit</code>. Aldri test i en arbeidsbok med ekte/sensitivt innhold eller Håkons levende hovedfil — se <a href="#t-sikkerhetsregler">sikkerhetsregler</a>. En frisk kastefil for hver runde unngår at rester fra forrige test (gamle ark, komponenter, registerrader) skjuler eller forfalsker resultatet av gjeldende test.</p>
+</div>
+
+<div class="technique" id="t-isolert-installer-kopi">
+  <h4>Isolert installer-kopi når andre Excel-instanser kan kjøre</h4>
+  <p>Installer-scripts bruker normalt <code>GetActiveObject</code> for å gjenbruke en allerede kjørende Excel-instans, men dette binder seg til HVILKEN SOM HELST kjørende, registrert instans — også en annen sesjons eller Håkons levende arbeidsbok (se <a href="#g-ns-getactiveobject-hvilken-som-helst">fallgruven</a>). Lag derfor en TESTKOPI av installer-scriptet der <code>GetActiveObject</code>-blokken er byttet ut med <code>$excel = $null</code>, slik at koden alltid går videre til <code>New-Object -ComObject Excel.Application</code> og dermed garantert får en egen, isolert Excel-prosess. Brukes særlig når en annen Excel-instans allerede kjører (sjekk <code>Get-Process EXCEL | Select Id,MainWindowTitle</code> eller <code>Get-CimInstance Win32_Process</code> først).</p>
+</div>
+
+<div class="technique" id="t-rot-full-sti">
+  <h4>Koble seg til en åpen kastefil via Running Object Table på FULL STI</h4>
+  <p>Etter at en (isolert) installer har åpnet kastefilen og latt Excel stå åpent (installeren lagrer ikke selv), kobler et testscript seg til akkurat DEN arbeidsboken via Running Object Table (ROT) på kastefilens FULLE, LOKALE STI — aldri via <code>GetActiveObject</code> (som ville kunne hente feil instans). Viktig fallgruve å huske her: for en OneDrive/SharePoint-synket fil returnerer <code>Workbooks.FullName</code> en <code>https://</code>-URL, ikke den lokale stien (se <a href="#g-ns-fullname-onedrive-url">fallgruven</a>) — match derfor på riktig format avhengig av hvor testfilen faktisk ligger. Enhver manuell/ad-hoc COM-manipulasjon gjort via denne veien må avsluttes med <code>$wb.Save()</code> (se <a href="#g-ns-manuell-com-uten-save">fallgruven</a>).</p>
+</div>
+
+<div class="technique" id="t-testmodul-tekstfil">
+  <h4>Testmodul med resultat til tekstfil, ikke MsgBox</h4>
+  <p>Egen, midlertidig VBA-testmodul: <code>VBComponents.Add(1)</code> + <code>AddFromString</code> (UTEN en bokstavelig Attribute-linje som første linje, se <a href="#g-ns-addfromstring-attribute-linje">fallgruven</a>). Testresultater skrives til en tekstfil i <code>%TEMP%</code> via <code>Open For Append</code> — ALDRI via <code>MsgBox</code> eller returverdier som krever manuell avlesning i en automatisert/hodeløs kjøring. Modulen fjernes igjen etter testen. Egen variant: en KOMPILERINGSSJEKK-modul som refererer konstanter/funksjoner fra modulen som testes (kalt «TriggerFullCompile» i praksis), kjørt via <code>Excel.Run</code>, for å tvinge frem eventuelle kompileringsfeil (se <a href="#g-ns-kompileringsfeil-blokkerer-alt">fallgruven om at én kompileringsfeil blokkerer alt</a>) tidlig og kontrollert.</p>
+</div>
+
+<div class="technique" id="t-upsert-firesyklus">
+  <h4>UPSERT-test: fire sykluser mot syntetiske data, med kryss-ark-formel som vakthund</h4>
+  <p>Test UPSERT-skrivingen (<code>modNettskjema.WriteRowsToSheet</code>) isolert med syntetiske <code>RowDicts</code> (en <code>Collection</code> av <code>Scripting.Dictionary</code>) og en kolonne-<code>Collection</code>, mot et kilde-ark med formler som <code>=SUM(TestNS_tbl[Skole-id])</code> og <code>=COUNTA(TestNS_tbl[Navn])</code> for å fange opp <a href="#g-ns-frosne-referanser">frysing av strukturerte kryss-ark-referanser</a>. Kjør FIRE sykluser: (1) første bygg med 3 rader, (2) oppdatering av eksisterende + 2 nye rader, (3) én manglende rad i inndata (skal IKKE slettes) + én manglende nøkkel i en rad (skal gi en EKTE tom celle, se <a href="#g-ns-array-tom-vs-streng">Empty vs. tom streng</a>) + én ny rad, (4) en helt ny kolonne + en ny rad. Etter HVER syklus: sjekk at <code>.Formula</code> er uendret (ikke bare <code>.Value</code>), at summene stemmer, at celleverdier og <code>IsEmpty</code> er korrekte, at header er riktig, og at radantallet stemmer. Denne testen var det som først bekreftet at UPSERT-arkitekturen (v3.20.0+) faktisk løste frysingsproblemet fra tidligere Unlist/Resize-forsøk.</p>
+</div>
+
+<div class="technique" id="t-ui-printwindow-postmessage">
+  <h4>UI-testing uten å røre Håkons mus/tastatur: modeless visning, PrintWindow, PostMessage til dypeste barnevindu</h4>
+  <p>Vis skjemaet MODELESS (<code>Form.Show vbModeless</code>) fra en testmodul, slik at testscriptet beholder kontrollen. Skjermbilde av KUN skjemavinduet (aldri av hele skjermen, av personvernhensyn): finn vinduet med <code>FindWindow("ThunderDFrame", tittel)</code> filtrert på EGEN Excel-PID, kall <code>SetProcessDPIAware</code>, og ta bildet med <code>PrintWindow(hwnd, hdc, 2)</code> — ALDRI <code>CopyFromScreen</code> (som ville fanget hele skjermen, inkludert eventuelt annet sensitivt innhold). Syntetiske klikk sendes med <code>PostMessage</code> (WM_LBUTTONDOWN/WM_LBUTTONUP) til det DYPESTE barnevinduet, funnet via en <code>ChildWindowFromPointEx</code>-løkke (klasse «F3 Server ...») — å sende direkte til selve <code>ThunderDFrame</code> treffer ikke kontrollene. Koordinater regnes om fra punkter til piksler: klientbredde i piksler delt på skjemaets <code>InsideWidth</code> i punkter (pass på desimalkomma i norsk locale ved lesing av slike tall fra VBA — bruk <code>InvariantCulture</code>, se <a href="#g-ns-norsk-locale">fallgruven</a>). <code>Shift</code>-parameteret i musehendelser leses fra EKTE tastaturtilstand og kan IKKE simuleres via meldinger; test en Shift-avhengig gren (f.eks. områdevalg) ved i stedet å patche betingelsen midlertidig i testkopien med <code>CodeModule.ReplaceLine</code>, og tilbakestille etterpå.</p>
+</div>
+
+<div class="technique" id="t-bm-click-dialogknapper">
+  <h4>Svare på MsgBox og VBE-feildialoger uten museklikk: EnumWindows + SendMessage BM_CLICK</h4>
+  <p>For en <code>MsgBox</code>: finn dialogvinduet med <code>EnumWindows</code> etter vindusklasse <code>#32770</code>, filtrert på kjent tittel og EGEN Excel-PID (<code>GetWindowThreadProcessId(excel.Hwnd)</code>), les teksten fra dialogens «Static»-barnekontroll, og trykk riktig knapp med <code>SendMessage</code> (<code>BM_CLICK</code> = <code>0xF5</code>) direkte på knappens vindushåndtak — IKKE simulert museklikk. For en HENGENDE VBE-feildialog (kompilerings-/kjøretidsfeil i en automatisert instans, se <a href="#g-ns-vbe-dialog-henger">fallgruven</a>) gjelder en litt annen, verifisert prosedyre, se <a href="#t-vbe-dialog-gjenoppretting">egen teknikk under</a>.</p>
+</div>
+
+<div class="technique" id="t-vbe-dialog-gjenoppretting">
+  <h4>Gjenoppretting etter hengende VBE-feildialog (kompilerings-/kjøretidsfeil)</h4>
+  <p>Symptom: et <code>$excel.Run(...)</code>-kall henger uendelig; <code>Get-Process EXCEL | Select MainWindowTitle</code> viser «Microsoft Visual Basic for Applications» eller senere «Fil - Excel [break]». <code>try/finally</code> hjelper ikke, siden selve COM-kallet aldri returnerer, og <code>Excel.Quit</code> avslutter ikke prosessen mens dialogen står åpen. Trygg gjenoppretting, i rekkefølge: (1) bekreft FØRST at prosessen faktisk er egen kastefil (vindutittel/PID/StartTime matcher nylig opprettet testfil) — anta ALDRI; (2) les selve feilteksten UTEN skjermbilde via UI Automation (<code>System.Windows.Automation</code>): finn vinduet for prosess-ID-en, søk gjennom <code>Descendants</code> etter <code>ControlType.Pane</code>-elementer med <code>.Current.Name</code> som starter med «Compile error:» eller «Run-time error» — dette avslører den ekte rotårsaken direkte; (3) klikk riktig knapp («OK» for kompileringsfeil, «End» for kjøretidsfeil) via SIMULERT museklikk på knappens <code>GetClickablePoint()</code>-koordinater (<code>user32.dll SetCursorPos</code> + <code>mouse_event</code>) — IKKE <code>InvokePattern</code>, som disse dialogknappene ofte ikke støtter; (4) etter «OK» på en kompileringsfeil er prosjektet FORTSATT i brutt tilstand (<code>[break]</code>) og selve <code>.Run()</code>-kallet returnerer fortsatt ikke — enten gi ett «End»-klikk til, ELLER (enklest og tryggest når filen uansett ikke er lagret) lukk arbeidsboken uten lagring via COM (<code>$wb.Saved = $true; $wb.Close($false)</code>), som avbryter det hengende bakgrunns-COM-kallet slik at det feiler med en ordentlig exit code i stedet for å henge for alltid; (5) bekreft opprydding med <code>Get-Process EXCEL</code> (bør vise ingen prosesser, eller kun andre sesjoners). Prøv IKKE på nytt / hamre videre uten å ha lest feilteksten først.</p>
+</div>
+
+<div class="technique" id="t-nestede-modale-bakgrunnsprosess">
+  <h4>Teste nestede modale skjemakjeder via bakgrunnsprosess og bro-funksjoner</h4>
+  <p>For en kjede av modale skjema (f.eks. hovedmeny → Innstillinger → Kolonner): <code>Application.Run</code> støtter ikke å adressere en UserForm-metode direkte («Skjema.Metode»), så bruk en <code>Public Sub</code>/<code>Function</code> i en standardmodul som bro. Hvert BLOKKERENDE kall (som åpner et modalt skjema eller en MsgBox) kjøres i sin EGEN bakgrunnsprosess (<code>Start-Process powershell -File bridge.ps1</code>), slik at hovedtestskriptet kan fortsette å polle hvilket skjema som til enhver tid er åpent via en bro-funksjon som leser <code>UserForms</code>-navn. Knappeklikk uten mus: en bro-Sub i en standardmodul som setter <code>Controls(navn).Value = True</code> (utløser samme <code>Click</code>-logikk som et ekte klikk ville gjort, der kontrolltypen støtter det).</p>
+</div>
+
+<div class="technique" id="t-credential-manager-pinvoke">
+  <h4>API-utforskning uten å åpne Excel: token via Credential Manager-P/Invoke</h4>
+  <p>For å utforske/teste API-endepunkter direkte trengs ikke Excel: les Client Secret fra Windows Credential Manager med P/Invoke <code>CredReadW</code> fra ren PowerShell (rask, stabil), hent et token, og kall endepunkter med <code>Invoke-WebRequest</code>. Skriv ALDRI secret til konsoll eller loggfil under dette. Nyttig for å bekrefte endepunktoppførsel (statuskoder, format) uavhengig av VBA/COM-laget.</p>
+</div>
+
+<div class="technique" id="t-oppgraderingstest">
+  <h4>Oppgraderingstest: forrige versjon → tilstand → ny versjon, verifiser bevaring</h4>
+  <p>Installer FORRIGE versjon av installeren i kastefilen, sett en realistisk tilstand (registerrad, secret, kolonneinnstillinger), lukk/lagre filen, installer deretter DEN NYE versjonen i SAMME fil (uten å slette den først), og verifiser at all tidligere tilstand/data er bevart OG at alle forventede VBA-komponenter finnes og er komplette (ikke tomme, se <a href="#g-ns-tom-komponent">fallgruven</a>). Fanger opp regresjoner i oppgraderingsstien som en ren fersk installasjon ikke ville avslørt.</p>
+</div>
+
+<div class="technique" id="t-sikkerhetsregler">
+  <h4>Sikkerhetsregler for testing (sensitiv data og delt Excel-miljø)</h4>
+  <p>Aldri test mot Hovedarbeidsboken eller andre filer med ekte respondentdata — kun kastefiler (se <a href="#t-kastefil-livssyklus">kastefil-livssyklus</a>). Aldri <code>GetActiveObject</code> uten å først ha vurdert risikoen for å treffe en annen sesjons/brukers Excel-instans (se <a href="#g-ns-getactiveobject-hvilken-som-helst">fallgruven</a>) — bruk isolert installer-kopi ved tvil. Drep/lukk ALDRI en Excel-prosess uten først å ha bekreftet at det er ens egen testinstans (vindutittel, StartTime, dialogtekst — se <a href="#t-vbe-dialog-gjenoppretting">gjenopprettingsteknikken</a>). Tester som kan kalle det ekte nettverket/API-et skal som hovedregel bruke en TOM eller FALSK secret (feiler trygt uten nettverkskall eller med en kontrollert tidlig feil, se <a href="#g-ns-tidlig-feil-bevis-ikke-suksess">fallgruven om at dette ikke beviser suksess-stien</a>). Sensitivt respondentinnhold leses eller vises ALDRI under bygging/testing — kun struktur, formler, overskrifter og MØNSTERTELLINGER (f.eks. for å verifisere encoding, se <a href="#g-ns-responsetext-charset">mojibake-fallgruven</a>). Ett unntak er dokumentert i kildene: én gang, med Håkons UTTRYKKELIGE tillatelse, ble Hovedarbeidsboken lest READ-ONLY via ROT for å diagnostisere en konkret formelfeil (kun struktur/formler, ikke innhold) — dette er IKKE en stående fullmakt og skal ikke gjentas uten ny, uttrykkelig tillatelse hver gang.</p>
+</div>
+  </div></details>
+  <details class="acc"><summary>Makromeny</summary><div>
+<div class="technique" id="t-makromeny-ikke-berore">
+  <h4>Grunnregel: aldri åpne, les eller rør Håkons ekte filer</h4>
+  <p>Ikke åpne Hovedarbeidsboken, Testfil eller andre av Håkons levende filer (Håkon: «Du skal ikke gjøre noe med Hovedarbeidsboken!»). Alle tester skjer i egne kastefiler. Hvis Håkon selv åpner Makromeny i sin egen fil under testing, vent på ham («Jeg lukker nå») og be om lov før du gjør noe mer.</p>
+</div>
+
+<div class="technique" id="t-makromeny-kastefiler">
+  <h4>Kastefiler med unike navn</h4>
+  <p>Lag egne testarbeidsbøker med unike navn (f.eks. <code>MakromenyCrashTest2_&lt;tilfeldig&gt;.xlsm</code>) i <code>%TEMP%</code>, via Excel COM: <code>Workbooks.Add</code> -&gt; <code>SaveAs</code> som xlsm (filformat 52). Installer med <code>powershell -File Makromeny.ps1 -Path &lt;fil&gt;</code>; test også <code>-Uninstall</code>; verifiser persistens ved å lukke boka, åpne den på nytt og sjekke at komponentene finnes (eller er borte). Test alltid nytt/endret VBA her først, fordi en «Compile error»-dialog ellers vises på Håkons skjerm og en kompileringsfeil i én modul blokkerer alle makroer i boka (<a href="#g-kompilering-kastefil">kompileringsfeil</a>). Unike navn er viktig fordi alle bøker deler én Excel-instans.</p>
+</div>
+
+<div class="technique" id="t-makromeny-installer-flere-boker">
+  <h4>Test OnAction-fiksen med flere åpne bøker</h4>
+  <p>For å verifisere kvalifisert OnAction (<a href="#g-crossworkbook-onaction">cross-workbook OnAction</a>): åpne flere kastefiler i samme Excel-prosess, installer i én av dem (den er ikke nødvendigvis aktiv), og kontroller at knappens <code>OnAction</code> peker på <code>'&lt;riktig bok&gt;'!Makronavn</code>. Gjenta med hver av de andre installerne (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter).</p>
+</div>
+
+<div class="technique" id="t-makromeny-delt-excel">
+  <h4>Koble til delt Excel-instans og kall makroer kvalifisert</h4>
+  <p>Bruk <code>[Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")</code> og finn boka på <code>FullName</code>. Kall makroer kvalifisert: <code>$excel.Run("'Fil.xlsm'!SettArkKnappPaa")</code> (ukvalifisert feiler, se <a href="#g-delt-excel-application-run">Application.Run</a>). Enumerering via Running Object Table (late-bound COM) feilet, <code>Find-MyExcel.ps1</code> er beholdt som «ikke anbefalt» (<a href="#g-rot-enumerering">ROT</a>). Frigjør COM-objekter med <code>ReleaseComObject</code> også ved feil.</p>
+</div>
+
+<div class="technique" id="t-makromeny-modal-skjema">
+  <h4>Modale UserForm-tester: EnumWindows, PrintWindow, PostMessage WM_CLOSE</h4>
+  <p>Et modalt skjema blokkerer kallet som viser det. Fremgangsmåte: (1) kjør triggeren (f.eks. <code>Run "'Fil.xlsm'!VisMakroMeny"</code>) i bakgrunnen med timeout; (2) finn vinduet med <code>EnumWindows</code>: vindusklasse <code>ThunderDFrame</code> og caption «Makromeny» (filtrer på Excel-prosessens PID); (3) ta bilde med <code>PrintWindow(hwnd)</code>; (4) lukk med <code>PostMessage(hwnd, 0x0010, 0, 0)</code> (0x0010 = WM_CLOSE). Hvis noe «henger», enumerer også vinduer per PID og let etter en skjult feildialog (<code>#32770</code>) bak skjemaet (<a href="#g-skjult-feildialog-modal">skjult feildialog</a>). Type-definisjoner med <code>Add-Type</code> må ligge i samme script som bruker dem (ingen tilstand mellom verktøykall).</p>
+</div>
+
+<div class="technique" id="t-makromeny-printwindow">
+  <h4>Skjermbilder med PrintWindow, ikke koordinater</h4>
+  <p>Bruk <code>PrintWindow(hwnd)</code> mot testvinduet. Koordinatbaserte skjermbilder kan fange andre vinduer på Håkons skjerm (et nesten-uhell fanget sidepanelet hans; bildet ble slettet umiddelbart).</p>
+</div>
+
+<div class="technique" id="t-makromeny-krasjsimulering">
+  <h4>Simulere et krasj-scenario med en midlertidig testmodul</h4>
+  <p>For krasjfiksen i v2.2.1 ble scenarioet gjenskapt i en kastefil: legg til testmodul <code>modTest</code> (<code>VBComponents.Add(1)</code>, fjernes etterpå) med <code>SimulerKrasjScenario</code>: (1) aktiver arket «SlettesSnart», (2) slett det (<code>DisplayAlerts = False</code>), (3) aktiver «Makromeny»-fanen. Den modale menyen som åpnes lukkes med WM_CLOSE (se modal-teknikken). Ved suksess skriver testen «INGEN_KRASJ_OK» i A1, og aktivt ark er første ark. Driver: <code>Run-CrashTest.ps1</code>. Lærdom: gjenskap krasjscenarioet mekanisk (slett objektet som referansen peker på) i stedet for å vente på at det oppstår.</p>
+</div>
+
+<div class="technique" id="t-makromeny-ikonverifisering">
+  <h4>Ikonverifisering: last lagret .ico på nytt og rendre ekte</h4>
+  <p>Last den <em>lagrede</em> .ico-fila på nytt med <code>New-Object System.Drawing.Icon</code>, sjekk <code>Width</code>/<code>Height</code> og rendre den i en ekte WinForms <code>PictureBox</code> (<code>Verify-RealRender.ps1</code>). Ikke lagre PNG fra in-memory-bitmap: den ser fin ut selv om ikonet er korrupt (256x256 via <code>GetHicon</code> ble korrupt, se <a href="#g-gethicon-256-korrupt">GetHicon</a>). For lesbarhet i liten størrelse: <code>Preview-Small.ps1</code> lager forhåndsvisning på ca. 40 px, også forstørret 3x.</p>
+</div>
+
+<div class="technique" id="t-makromeny-byteskanning">
+  <h4>Sjekk koding med byteskanning</h4>
+  <p>Kontroller at .ps1-filer har riktig BOM-status og ingen uventede rå æøå: skann bytene etter <code>EF BB BF</code> (UTF-8 BOM) og <code>0xC3</code> (start på UTF-8-kodet æøå). Makromeny.ps1 har ingen BOM og null rå æøå; de fire andre installerne har BOM (<a href="#g-utf8-bom-aeoeaa">UTF-8 uten BOM</a>).</p>
+</div>
+
+<div class="technique" id="t-makromeny-delvis-verifisering">
+  <h4>Del opp det som ikke kan klikkes automatisk</h4>
+  <p>UserForm-kontroller vises ikke i UI Automation, så ekte museklikk på en dynamisk flis kan ikke scriptes (<a href="#g-uia-userform">UIA og UserForm</a>). Verifiser delene hver for seg: (a) at menyen bygges (riktige fliser ut fra installerte komponenter), (b) at <code>Unload</code> skjer før <code>Run</code>, (c) at selve <code>Run</code> starter riktig makro. Rapporter ærlig at ekte klikk-test gjenstår for Håkon.</p>
+</div>
+
+<div class="technique" id="t-makromeny-rydding">
+  <h4>Rydding etter testing</h4>
+  <p>Drep <strong>bare</strong> egne <code>EXCEL.EXE</code> etter å ha bekreftet PID/vindustittel; lukk egen testbok med <code>Close($false)</code>; slett kastefila; aldri <code>Quit</code> på den delte Excel-instansen (<a href="#g-delt-excel-instans-opprydding">delt instans</a>).</p>
+</div>
+
+<div class="technique" id="t-makromeny-hjelpescripts">
+  <h4>Gjenbrukbare hjelpescripts (Windows PowerShell 5.1)</h4>
+  <p>Fra Makromeny-utviklingen, kopiert til <code>_overlevering\Makromeny\hjelpescripts\</code> (juster stier som peker til gammel scratchpad og til <code>EMI\Resources</code>): <code>Convert-UserIcons.ps1</code> (PNG -&gt; avrundet gradient-badge -&gt; 128x128 .ico), <code>Make-Base64.ps1</code> (.ico -&gt; 40x40 BMP -&gt; base64 i 200-tegns VBA-biter), <code>Verify-RealRender.ps1</code>, <code>Preview-Small.ps1</code>, <code>part1.txt</code>/<code>part2.txt</code> (VBA og installer-kode delt opp; bruk <code>EMI\Macros\Makromeny.ps1</code> som kilde). Ikke kopiert: <code>Run-CrashTest.ps1</code>, <code>Find-MyExcel.ps1</code> (ROT, ikke anbefalt), <code>Generate-Icons.ps1</code> (forkastede design). Alle kjøres med <code>powershell.exe</code> (5.1), ikke PowerShell 7.</p>
+</div>
+  </div></details>
+</section>

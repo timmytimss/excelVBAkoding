@@ -1,0 +1,79 @@
+
+  <h4>API-flyt (modAuthentication)</h4>
+  <p><strong>Token.</strong> <code>POST https://authorization.nettskjema.no/oauth2/token</code> med <code>Authorization: Basic Base64(clientId:clientSecret)</code> og body <code>grant_type=client_credentials</code> (<code>Content-Type: application/x-www-form-urlencoded</code>). Base64 lages via MSXML (<code>MSXML2.DOMDocument.6.0</code>, <code>bin.base64</code>) av <code>StrConv(..., vbFromUnicode)</code>; CR/LF strippes. <code>expires_in</code> er ca. 86400 (24 t). Tokenet caches kun i minnet, per ClientId (Dictionary); utløp = <code>Now + (expires_in - 60) / 86400</code> med 60 s sikkerhetsmargin, IKKE <code>TimeSerial</code> (<a href="#g-ns-timeserial">Overflow-fallgruven</a>). Secret leses fra registerarkets <code>I2</code>; er den tom, forsøkes Credential Manager (mål <code>NettskjemaHenter:&lt;clientId&gt;</code>); er begge tomme kastes feil <strong>1021</strong> UTEN nettverkskall (nyttig for trygg UI-testing). Client-identiteten <code>[clientId]@apiclient</code> brukes kun til tilgangsstyring i Nettskjema; den skal IKKE legges til client_id i Basic Auth (bruk den faktiske utstedte clientId).</p>
+
+  <h4>Retry, backoff og feilkoder</h4>
+  <table>
+    <thead><tr><th>Situasjon</th><th>Oppførsel</th></tr></thead>
+    <tbody>
+      <tr><td>Generelt</td><td><code>MAX_RETRIES = 5</code>; backoff <code>2^forsøk</code> sekunder, maks 30 s (<code>BackoffSeconds</code>), ventet med <code>Application.Wait</code>. Gjelder både token og data (token fikk dette først i v3.15.0).</td></tr>
+      <tr><td>HTTP 429</td><td>Les <code>Retry-After</code> (maks 30 s), retry.</td></tr>
+      <tr><td>HTTP 5xx / nettverksfeil</td><td>Retry med backoff. <code>WinHttp.Send</code>-feil fanges inne i funksjonen og re-raises med egen tekst (<a href="#g-ns-winhttp-send-com-feil">fallgruve</a>).</td></tr>
+      <tr><td>HTTP 401 på data</td><td>Glem tokenet og prøv ÉN gang til (<code>usedTokenRefresh</code>); ellers feil <strong>1040</strong>.</td></tr>
+      <tr><td>Andre 4xx på data</td><td>Ingen retry; feil <strong>1041</strong> med svartekst.</td></tr>
+      <tr><td>Token-POST 4xx</td><td>Ingen retry; feil <strong>1022</strong>. 5xx/nett: retry.</td></tr>
+      <tr><td>Ingen secret</td><td>Feil <strong>1021</strong> uten nettverkskall.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Timeouts (WinHTTP <code>SetTimeouts</code> resolve/connect/send/receive, ms)</h4>
+  <table>
+    <thead><tr><th>Kall</th><th>Verdier</th></tr></thead>
+    <tbody>
+      <tr><td>Token-POST</td><td>10000 / 10000 / 15000 / 20000</td></tr>
+      <tr><td>Data-GET (<code>/answers</code>)</td><td>10000 / 10000 / 30000 / 120000</td></tr>
+      <tr><td><code>ApiGetSingleAttempt</code> (best effort, <code>/elements</code>)</td><td>2000 / 2000 / 3000 / 5000, ETT forsøk</td></tr>
+    </tbody>
+  </table>
+  <div class="callout note">Historikken har en uklarhet: v2.3.0 kuttet timeouts til 5/5/15/60 (verste-fall-ventetid med 5 retries ca. 11 min → ca. 6 min), men nåværende kode (v3.22.1) har verdiene over. Når og hvorfor de ble økt igjen står ikke i kildene. Verdiene i tabellen er de gjeldende.</div>
+
+  <h4>Endepunkter</h4>
+  <table>
+    <thead><tr><th>Endepunkt</th><th>Bruk og fallgruver</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /api/v3/form/{formId}/answers</code></td><td><code>Accept: application/x-ndjson</code> KUN (<code>application/json</code> gir HTTP 406). Svar = NDJSON i LANGT format: én JSON-linje per enkeltsvar med <code>formId, submissionId, answerId, elementId, textAnswer, elementType, createdDate, modifiedDate, answerOptionIds[]</code>. <code>modJsonFlatten</code> splitter på linjeskift og PIVOTERER til én rad per submissionId. <strong>Ingen paginering:</strong> hele historikken kommer som én strøm ved hvert kall; vi henter alt hver gang og UPSERT-er (kan bli tungt ved tusenvis; inkrementell henting er ikke bygd). Se <a href="#g-ns-answers-accept">Accept</a>, <a href="#g-ns-answers-langt-format">langt format</a>, <a href="#g-ns-ingen-paginering">paginering</a>.</td></tr>
+      <tr><td><code>GET /api/v3/form/{formId}/elements</code></td><td><code>application/json</code>, BEST EFFORT (ett forsøk, korte timeouts, feiler stille → rå ID-er brukes). Kan periodevis svare 401 «Bearer token malformed». Gir spørsmålstekst (auto-alias), alternativtekster og skjemaets spørsmålsrekkefølge (<a href="#g-ns-elements-401">fallgruve</a>).</td></tr>
+      <tr><td><code>GET /api/v3/form/me</code></td><td>«Test tilkobling». Krever gyldig token (401 uten). IKKE <code>/api/v3/me</code>, som gir 200 med <code>isAuthenticated:false</code> selv uten token (<a href="#g-ns-me-endepunkt">fallgruve</a>).</td></tr>
+      <tr><td><code>/form/{id}/submissions</code></td><td>Finnes IKKE i v3 (v2-relikt; ga HTTP 405). Kom fra idénotatet (<a href="#g-ns-submissions-finnes-ikke">fallgruve</a>).</td></tr>
+      <tr><td><code>/form/{formId}/csv-report</code></td><td>Ikke brukt (octet-stream). Ga 401 tidlig i utviklingen (v3.0.0) sammen med <code>/elements</code>, senere fungerende for <code>/elements</code>.</td></tr>
+    </tbody>
+  </table>
+  <p>Svar dekodes ALLTID fra <code>ResponseBody</code> som UTF-8 via <code>ADODB.Stream</code> (<code>DecodeUtf8ResponseBody</code>), aldri <code>ResponseText</code> (<a href="#g-ns-responsetext-charset">mojibake-fallgruven</a>). Alt er late binding: <code>Scripting.Dictionary</code>, <code>WinHttp.WinHttpRequest.5.1</code>, <code>MSXML2.DOMDocument.6.0</code>, <code>ADODB.Stream</code>.</p>
+  <div class="callout note"><strong>Bekreftelse fra Nettskjema-utvikler (RT-sak #7666763, 17.09.2026, Jan Ming Lam):</strong> <code>/answers</code> krever <code>application/x-ndjson</code>; alle andre endepunkter fungerer med <code>application/json</code> (eller <code>*/*</code>); csv-report er octet-stream. Dette stemmer med det vi bygde på. Håkon svarte i saken kort og vennlig og uten mye teknisk språk: først «siden sist gjorde jeg noen justeringer», så hva som stemmer med deres råd, så «nå fungerer det», til slutt takk.</div>
+
+  <h4>Kjent miljøproblem: intermitterende nettverksfeil (ikke kodefeil)</h4>
+  <p>14.–15.09.2026 ga «Operasjonen ble tidsavbrutt» (HTTP=0) mot <code>nettskjema.no</code>/<code>authorization.nettskjema.no</code>. To uavhengige HTTP-stakker (WinHTTP og .NET <code>Invoke-WebRequest</code>) feilet likt, så det var ikke kodefeil. Tidslinje (fra <code>nettverksdiagnostikk-logg.txt</code>; mal for fremtidige sjekker: tidspunkt, DNS, TCP IPv6, TCP IPv4, HTTPS GET, kommentar):</p>
+  <table>
+    <thead><tr><th>Tidspunkt</th><th>Observasjon</th></tr></thead>
+    <tbody>
+      <tr><td>14.09 tidlig ettermiddag</td><td>Første vellykkede VBA-kall (WinHTTP) mot <code>/answers</code>: 732 svar hentet.</td></tr>
+      <tr><td>14.09 senere</td><td>Samme fil og skjema: to forsøk rett etter hverandre, begge «tidsavbrutt» (ingen respons). En henvendelse ble sendt til UiO IT (utkast lå i <code>henvendelse-uio-it.txt</code>).</td></tr>
+      <tr><td>14.09 15:00</td><td>DNS OK (1,29 s; både IPv6- og IPv4-adresser). TCP IPv6 port 443: feilet etter 5,20 s. TCP IPv4: feilet etter 9,54 s. HTTPS GET <code>/api/v3/me</code>: rask feil (0,08 s, «Kan ikke koble til den eksterne serveren»; tyder på aktiv avvisning, ikke stille black hole). Begge protokoller nede på TCP-nivå (ca. 15:00–15:09).</td></tr>
+      <tr><td>Tidligere observasjon (v2.3.2)</td><td>DNS raskt og riktig, men TCP mot IPv6-adressen hang ~37 s og feilet, mens nettleseren fungerte.</td></tr>
+      <tr><td>15.09 08:18</td><td>DNS OK (0,29 s). TCP IPv6 fortsatt nede (5,35 s). TCP IPv4: OK (4,75 s). HTTPS GET <code>/api/v3/me</code>: 200 etter 0,11 s. Ukjent om UiO IT gjorde noe eller om det løste seg selv over natten.</td></tr>
+      <tr><td>15.09 rett etter</td><td>Ende-til-ende OK: <code>RefreshConnectionRow</code> mot testskjemaet hentet 744 svar (opp fra 732; nye ekte svar).</td></tr>
+    </tbody>
+  </table>
+  <p><code>WinHttpRequest</code> har ingen «tving IPv4». Diagnose: <code>Test-NetConnection -ComputerName authorization.nettskjema.no -Port 443</code> mot IPv6- og IPv4-adressen hver for seg; kjør parallelt en annen HTTP-stakk. Se <a href="#g-ns-nettverk-timeouts">fallgruven</a>.</p>
+
+  <h4>UPSERT-arkitekturen i detalj (<code>WriteRowsToSheet</code>, v3.20.0+)</h4>
+  <div class="callout warn"><strong>Kjerneregel:</strong> tabellen (ListObject) bygges KUN én gang. Deretter aldri <code>Unlist</code>, <code>Resize</code>, <code>ListRows.Delete</code>, <code>ListColumns.Delete</code> eller gjenoppbygging. ListObject-identitet bevares slik at strukturerte kryss-ark-referanser og Power Query overlever.</div>
+  <ol>
+    <li><strong>Første henting</strong> (tabellen finnes ikke): <code>ws.Cells.Clear</code>, header + data skrives i ETT 2D-array-kall, <code>ListObjects.Add(xlSrcRange)</code>, <code>.Name</code> settes.</li>
+    <li><strong>Senere henting</strong>:
+      <ol type="a">
+        <li><code>tbl.ListColumns.Add</code> til antall registrerte kolonner (aldri fjerning).</li>
+        <li>Header-celler synkes med registrert visningsnavn/alias (å sette en header-cellens <code>Value</code> omdøper ListColumn og lar Excel oppdatere strukturerte referanser; <a href="#g-ns-header-omdop">tips</a>).</li>
+        <li>Bygg en <code>Scripting.Dictionary</code> over eksisterende submissionId (første kolonne) → radindeks.</li>
+        <li>For hver innkommende submission: finnes den → oppdater raden PÅ PLASS; ellers <code>tbl.ListRows.Add(AlwaysInsert:=True)</code> MED verifisering: <code>ListRows.Count</code> økte med 1, <code>DataBodyRange</code> finnes, radindeks gyldig (siste rad = <code>HeaderRowRange.Row + ListRows.Count</code>). Ellers <code>Err.Raise</code> 1061–1063, slik at data aldri havner stille utenfor tabellen (<a href="#g-ns-listrows-add-utenfor">bakgrunn</a>).</li>
+        <li>Hele raden skrives i ETT Range-kall fra en 1xN Variant-array (v3.21.0). Et <code>Empty</code>-element gir en EKTE tom celle; <code>""</code> gir tom streng (<a href="#g-ns-array-tom-vs-streng">forskjellen</a>). Målområdet skjæres til nøyaktig array-størrelse (<a href="#g-ns-array-storrelse">#N/A</a>).</li>
+        <li><code>VerifyAndRepairTable</code> (<code>Err.Raise</code> 1064–1066): sjekker at nye data ligger i DataBodyRange og at ListRows/DataBodyRange er konsistent; slår på <code>ShowTableStyleRowStripes</code> hvis avslått; logger KUN ved reparasjon; skal være konservativ og aldri endre legitime brukerinnstillinger (radhøyde, kolonnebredde, celleinnhold), og reassigner IKKE <code>TableStyle</code> (v3.20.3).</li>
+      </ol>
+    </li>
+    <li><strong>Sletting</strong>: rader som mangler i senere API-svar slettes ALDRI (beskytter mot forbigående ufullstendige svar; slettede Nettskjema-svar blir stående i tabellen). Et svar med 0 rader overskriver aldri eksisterende data (ADVARSEL i Log; se <a href="#g-ns-tom-200">tom HTTP 200</a>).</li>
+    <li><strong>Synlighet</strong>: kolonne-synlighet reapplyes etter hver henting (<code>ApplyColumnVisibility</code>).</li>
+    <li><strong>Feilhåndtering</strong>: <code>RefreshConnectionRow</code> har <code>On Error GoTo ErrHandler</code>, leser <code>Err.Number</code>/<code>Err.Description</code> i lokale variabler FØRST, logger, og returnerer <code>False</code> + <code>LastErrorMessage()</code>; ingen rå VBA-brudd (<a href="#g-ns-err-nullstilt">fallgruve</a>).</li>
+    <li><strong>Ytelse</strong>: én COM-skriving per rad (ikke per celle), 2D-array ved første bygg, redusert LogEvent-støy.</li>
+    <li><strong>Fjern tilkobling</strong> (flere): sletter ark + registerrad + ALLE kolonneinnstillinger for skjemaet. Sletter fra bunnen (høyeste registerrad først) fordi radnumre forskyves. Sletting av et ark kan gi hengende referanser i andre makroer (<a href="#g-ns-static-worksheet">fallgruve</a>).</li>
+  </ol>
+  <p><strong>Hvorfor:</strong> se designbeslutning 1 (rotårsaken til #REF!/frosne formler) og <a href="#g-ns-frosne-referanser">fallgruven</a>. Full henting hver gang gir likevel inkrementell oppførsel fordi UPSERT bare endrer/legger til det som trengs.</p>

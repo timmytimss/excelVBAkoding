@@ -1,0 +1,219 @@
+<div class="gotcha" id="g-shared-excel-instance" data-cat="com">
+  <h4>GetActiveObject kobler til HVILKEN SOM HELST kjørende Excel-instans</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et testkall kan i verste fall treffe Håkons EKTE, åpne arbeidsbok i stedet for den tiltenkte testfila, hvis begge er åpne i samme Excel-prosess. I ett tilfelle endte Håkons ekte VBA-prosjekt i debugger-«break»-modus (ufarlig for lagret innhold, men et reelt brudd på «aldri rør Hovedarbeidsboken»-regelen).</dd>
+    <dt>Årsak</dt><dd><code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code> kobler til den prosessen som HELST er kjørende, uansett hvilken arbeidsbok som faktisk er tiltenkt. Et ukvalifisert <code>Application.Run("modX.Fn")</code> kan dessuten resolves ambiguøst mot samme modulnavn i en ANNEN åpen arbeidsbok.</dd>
+    <dt>Løsning</dt><dd>For alt annet enn det aller siste «installer i ekte målfil»-steget: bruk en HELT SEPARAT <code>New-Object -ComObject Excel.Application</code>-instans, ikke <code>GetActiveObject</code>. Kvalifiser alltid <code>Run</code> mot en bestemt arbeidsbok. Hvis en delt instans må røres, enumerer <code>Workbooks</code> og match på eksakt <code>.FullName</code> først. Ved et uhell: foretrekk en skrivebeskyttet sjekk (f.eks. <code>Excel.Ready</code>, <code>VBE.MainWindow.Caption</code> for break-modus) fremfor korrigerende handling — la Håkon selv avvise en break-tilstand i stedet for å risikere et feil klikk på hans fil.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender / en tidligere versjon (gjentatte ganger)</p>
+</div>
+
+<div class="gotcha" id="g-com-instability-cycles" data-cat="com">
+  <h4>COM-ustabilitet etter mange bygge-/importsykluser i én økt</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Kan ikke angi OnAction-egenskapen» rett etter <code>Buttons().Add()</code>; «cannot run macro / macros disabled» på tidligere fungerende kall; til slutt tomme egenskaper selv ved LESING (Caption/OnAction blanke) rett etter en bekreftet vellykket lagring, mens Håkon så i det virkelige vinduet at alt faktisk var fint.</dd>
+    <dt>Årsak</dt><dd>Kumulativ COM-/Excel-tilstandsdegradering etter dusinvis av Add/Remove/Import-sykluser i én økt — aldri konkret rotårsaksbestemt. Etter nok slik churn blir selv READS upålitelige, ikke bare writes.</dd>
+    <dt>Løsning</dt><dd><code>Start-Sleep</code> 500 ms etter hver import og 300 ms MELLOM hver enkelt egenskapstildeling på en ny knapp (ikke bare én pause før hele blokka). Stopp live-testing tidlig når churnen blir stor, og stol i stedet på statisk kodegjennomgang + Håkons neste ekte kjøring. Etter mye COM-churn: ikke stol på en live COM-tilbakelesing som fasit heller — be brukeren se på det faktiske skjermbildet.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-installeren</p>
+</div>
+
+<div class="gotcha" id="g-com-smaa-fallgruver" data-cat="powershell">
+  <h4>Samling av små, gjentakende COM-fra-PowerShell-fallgruver</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Flere små, forskjellige feil dukket opp gjentatte ganger på tvers av installer-script: en Button-COM-feil som ligner en tekst-egenskap som mangler; et sært «int Count ()»-utskrift i stedet for et tall; en umiddelbar COM-feil rett etter at Excel-vinduet lukkes/tapes.</dd>
+    <dt>Årsak</dt><dd><code>$knapp.Characters.Text</code> finnes IKKE på et Button/Shape-objekt (det har <code>.Caption</code> i stedet). En sent-bundet VBA <code>Collection</code> returnert over COM skriver ut den LITTERALE teksten «int Count ()» i stedet for et tall når man leser <code>.Count</code> som egenskap — <code>System.__ComObject</code> trenger av og til et eksplisitt METODEKALL <code>.Count()</code> (med parenteser) i stedet. Et tapt/lukket Excel gir <code>MK_E_UNAVAILABLE</code> (<code>0x800401E3</code>) på et <code>GetActiveObject</code>-kall.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>.Caption</code>, ikke <code>.Characters.Text</code>, på Button/Shape. Prøv <code>.Count()</code> som metodekall når en sent-bundet COM-samling gir et rart strengresultat for antall. Sett <code>$excel.DisplayAlerts = $false</code> under bygging for å hindre at Excel-dialoger blokkerer en installasjon. Tolk <code>0x800401E3</code> som «Excel-instansen er borte», ikke en mystisk generisk feil.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender/Kolonnevelger-installerne</p>
+</div>
+
+<div class="gotcha" id="g-duplicate-open-file" data-cat="com">
+  <h4>Samme fil åpen to ganger (SharePoint/OneDrive-alias)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>VBA-editoren viser to komplette VBAProject-trær for det som skal være samme fil; installeren oppdaterer den ene mens Håkon ser på/lagrer den andre, stale kopien — oppleves som «fiksen virker ikke» selv om den faktisk kjørte riktig.</dd>
+    <dt>Årsak</dt><dd>SharePoint/OneDrive kan åpne samme fysiske fil som to uavhengige Workbook-objekter (ofte via to ulike cachede/aliasene stier, f.eks. en gammel «Nylige filer»-snarvei vs. en fersk navigering) uten at Excels egen samme-fil-allerede-åpen-deteksjon fanger det opp. Ingen fysisk duplikatfil på disk — bekreftet ved katalogsøk.</dd>
+    <dt>Løsning</dt><dd>Installeren sjekker <code>Workbooks</code> for et navn som er nøyaktig lik målfila ELLER matcher Excels duplikat-vindu-navnemønster <code>"&lt;FullName&gt;:2"</code>, <code>":3"</code> osv. (MERK: dette er det FULLE filnavnet inkludert <code>.xlsm</code>-endelsen, så kolon, så et tall — feil mønster kan matche stille ingenting). Avbryt med en tydelig melding hvis mer enn én match finnes, og advar (ikke-fatalt) hvis mer enn én <code>EXCEL.exe</code>-prosess kjører systemvidt. En full omstart av PC-en løste én observert episode, uten en 100 % sikker rotårsak utover det.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender / en tidligere versjon</p>
+</div>
+
+<div class="gotcha" id="g-installer-hopper-over-lik-versjon" data-cat="installer">
+  <h4>Installeren hopper stille over ved lik versjon</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En bug fikses, Håkon ber om å kjøre installeren på nytt — ingenting synlig skjer, ingen feil vises.</dd>
+    <dt>Årsak</dt><dd>Versjonssjekken (installert versjonskonstant == kildens versjonskonstant, og ikke <code>-Force</code>) short-circuiter installasjonen. Gjelder ALLE makro-.ps1-er i dette økosystemet — inkludert en situasjon der EMI-kopien av Mail-utsender fikk reelle kodeendringer uten tilsvarende versjonsbump, og dermed IKKE slår inn på arbeidsbøker som allerede har den «gamle» versjonen installert.</dd>
+    <dt>Løsning</dt><dd>Bump versjonskonstanten ved HVER endring i det installeren genererer — også for «bare» BOM-/leverings-/tekstfikser som ikke endrer logikk. Alternativt kjør med <code>-Force</code> for å tvinge reinstallasjon uavhengig av versjonssjekken.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender/Kolonnevelger-installerne</p>
+</div>
+
+<div class="gotcha" id="g-blanket-ui-cleanup" data-cat="process">
+  <h4>Aldri slett/endre delte UI-elementer med et generelt filter</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En opprydding i Mail-utsenders installer («slett knapper uten <code>OnAction</code>») slettet Kolonnevelgers helt urelaterte knapp på samme ark, fordi DEN også hadde blitt blank som følge av samme underliggende COM-ustabilitet (se <a href="#g-com-instability-cycles">COM-ustabilitet</a>).</dd>
+    <dt>Årsak</dt><dd>Et filter som ikke er avgrenset til EGET verktøys kjente, eksakte identifikatorer (f.eks. «tom <code>OnAction</code>») kan like gjerne treffe et helt annet, uavhengig installert verktøys UI-elementer, siden en arbeidsbok ofte er vert for flere makroers knapper side om side på samme ark.</dd>
+    <dt>Løsning</dt><dd>Match KUN egne, eksakte, kjente identifikatorer (spesifikt <code>OnAction</code>-navn, i både ukvalifisert og kvalifisert <code>*!Navn</code>-form) ved sletting/endring av delte UI-elementer som Shapes/knapper. Gjenopprettingen her skjedde ved å lage knappen på nytt direkte via COM med samme parametre som originalinstalleren — IKKE ved å kjøre det andre verktøyets egen installer på nytt (dens knappopprettelse er ofte gated bak «er dette en fersk installasjon», som ikke lenger stemmer når VBA-komponentene allerede finnes).</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-installeren (slettet Kolonnevelgers knapp ved et uhell)</p>
+</div>
+
+<div class="gotcha" id="g-hengende-com-kall" data-cat="com">
+  <h4>Hengende COM-kall er ofte en usynlig modal dialog</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>Application.Run</code>/<code>OnTime</code> returnerer aldri; prosessen viser «Responding» i Oppgavebehandling likevel.</dd>
+    <dt>Årsak</dt><dd>En skjult <code>MsgBox</code> eller en VBE-kompileringsfeildialog («Microsoft Visual Basic for Applications») venter et sted, ofte med en kryptisk HRESULT synlig utenfra (<code>0x800A0009</code>, eller <code>0x800AC472</code> = VBA_E_IGNORE/«Excel opptatt»).</dd>
+    <dt>Løsning</dt><dd>Enumerer vinduer for Excel-prosessens PID (<code>EnumWindows</code>), les tekst med UI Automation (Pane «Compile error: …»), lukk med <code>WM_CLOSE</code>, og <code>Stop-Process</code> som siste utvei hvis den blir stående. Sjekk ALLTID etter en installasjon at et skjema faktisk åpner uten en skjult dialog — kjør en <code>OnTime</code>-triggering av et skjema, siden VBA først kompilerer ved faktisk kjøring, ikke ved import.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-installeren</p>
+</div>
+
+<div class="gotcha" id="g-application-run-form-method" data-cat="com">
+  <h4>Application.Run/OnTime utenfra støtter ikke «Skjema.Metode»</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Kan ikke kjøre makroen …» ved forsøk på å kalle en metode på et spesifikt skjema (f.eks. <code>frmMasseSend.LesTilstand</code>) direkte fra et eksternt COM-kall — selv når skjemaets standardinstans allerede er lastet og synlig.</dd>
+    <dt>Årsak</dt><dd>Ekstern <code>Application.Run</code>/<code>OnTime</code> støtter kun rene navn på <code>Sub</code>/<code>Function</code> i en STANDARDMODUL, ikke punktum-syntaks mot et skjema.</dd>
+    <dt>Løsning</dt><dd>Legg midlertidige BRO-funksjoner i en standardmodul (f.eks. <code>modGenerisk</code>) som internt kaller inn i skjemaet (<code>Test_LesX()</code> kaller skjemaets egen metode; <code>Test_Aapne()</code> gjør <code>frmX.Show</code>). Et modalt <code>.Show</code> blokkerer IKKE andre eksterne COM-kall inn i samme Excel-instans — meldingspumpen kjører videre, og <code>OnTime</code> returnerer umiddelbart. Fjern ALLE test-broer før endelig innsending, hver runde, sammen med versjonsbump.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender (COM-testmønsteret gjennom hele prosjektet)</p>
+</div>
+
+<div class="gotcha" id="g-filer-i-bruk" data-cat="process">
+  <h4>Spør alltid før du lukker filer/Excel du ikke selv startet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Installasjon/kompilering kan kollidere hvis testfila eller Excel er åpen hos Håkon samtidig — han har flere ganger hatt filen åpen for å teste selv, uvarslet.</dd>
+    <dt>Årsak</dt><dd>Ingen automatisk låsedeteksjon forteller entydig om en fil/instans er «trygg å røre».</dd>
+    <dt>Løsning</dt><dd>Spør ALLTID («Kan jeg lukke …?») før noe lukkes. Drep aldri et <code>EXCEL.EXE</code> du ikke selv startet, uten å spørre først.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-testing</p>
+</div>
+
+<div class="gotcha" id="g-ps1-utf8-bom" data-cat="encoding">
+  <h4>.ps1 med æøå MÅ være UTF-8 med BOM</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«MÃ¥lform», eller lignende garbled tekst, dukker opp i VBA-koden, MsgBox-tekster eller kolonnenavn — feilen oppstår i PowerShells egen parsing FØR skriptet i det hele tatt kjører, også inni heredocs.</dd>
+    <dt>Årsak</dt><dd>Windows PowerShell 5.1 auto-detekterer kun UTF-8 når en byte-order-mark (BOM, <code>EF BB BF</code>) er til stede. Uten BOM tolkes fila som system-ANSI. Write-verktøy som skriver filer skriver som regel UTEN BOM.</dd>
+    <dt>Løsning</dt><dd>Legg på BOM etter skriving: <code>[IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p,[Text.Encoding]::UTF8), (New-Object Text.UTF8Encoding($true)))</code>. Sjekk de tre første bytene etter hver omskriving. Bump versjonskonstanten selv om ENDRINGEN bare er denne encoding-fiksen — se <a href="#g-installer-hopper-over-lik-versjon">installer-versjonssjekken</a>.</dd>
+  </dl>
+  <p class="src">Kilde: alle .ps1-installere i dette økosystemet</p>
+</div>
+
+<div class="gotcha" id="g-vba-import-ansi" data-cat="encoding">
+  <h4>Temp-filer for VBA-import skal IKKE ha -Encoding utf8</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Norske tegn (æøå) ødelegges ved <code>VBComponents.Import</code>, selv om selve .ps1-fila har korrekt BOM.</dd>
+    <dt>Årsak</dt><dd>VBAs <code>Import</code> forventer systemets ANSI-kodeside (samme som når Excel selv eksporterer <code>.bas</code>-filer), ikke UTF-8 — stikk i strid med den vanlige regelen om å alltid bruke <code>-Encoding utf8</code>.</dd>
+    <dt>Løsning</dt><dd>Skriv den midlertidige <code>.bas</code>/<code>.frm</code>-fila UTEN eksplisitt <code>-Encoding</code> på <code>Set-Content</code> (dvs. la den falle tilbake til system-ANSI).</dd>
+  </dl>
+  <p class="src">Kilde: alle installer-mønstre i dette økosystemet</p>
+</div>
+
+<div class="gotcha" id="g-return-liste-unwrap" data-cat="powershell">
+  <h4>return $liste av tom/ett-elements List rulles ut av PowerShell-pipelinen</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«You cannot call a method on a null-valued expression» første gang en liste er tom, eller uventet at man får ETT element i stedet for en liste med ett element.</dd>
+    <dt>Årsak</dt><dd>PowerShells pipeline «ruller ut» et <code>IEnumerable</code> automatisk — en tom liste blir <code>$null</code>, en ett-elements liste blir bare selve elementet.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>return ,$liste</code> (ledende komma) for å hindre utrulling og alltid returnere en faktisk liste, uansett antall elementer.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1, generelt installer-mønster</p>
+</div>
+
+<div class="gotcha" id="g-convertto-json-list" data-cat="powershell">
+  <h4>ConvertTo-Json av en List&lt;object&gt; pakket i @() feiler</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Argumenttypene samsvarer ikke»-feil ved <code>ConvertTo-Json -InputObject @($enListe)</code>.</dd>
+    <dt>Årsak</dt><dd>En kjent PowerShell-parameterbinder-bug (<code>PSToObjectArrayBinder</code>) ved denne kombinasjonen av typer.</dd>
+    <dt>Løsning</dt><dd>Kall <code>$liste.ToArray()</code> og send resultatet direkte til <code>ConvertTo-Json</code>, uten å pakke det inn i <code>@()</code> igjen.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1-verktøy i dette økosystemet</p>
+</div>
+
+<div class="gotcha" id="g-int-division-avrunding" data-cat="powershell">
+  <h4>[int](a/b) avrunder, trunkerer ikke</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«IndexOutOfRange» på radgrenser i en beregning som forventet trunkering (f.eks. piksel-til-rad-omregning).</dd>
+    <dt>Årsak</dt><dd><code>[int](31.875)</code> gir 32 (avrundet), ikke 31 (trunkert) — motsatt av hva mange språk gjør som standard.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>-shr 3</code> ved divisjon på 8, eller eksplisitt <code>[Math]::Floor(...)</code> for garantert trunkering.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1, generelt</p>
+</div>
+
+<div class="gotcha" id="g-catch-empty-datatap" data-cat="powershell">
+  <h4>Stille catch{} mellom les og skriv-tilbake kan skjule reelt datatap</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Data forsvinner stille ved lese-endre-skrive-tilbake-mønstre mot en fil som kan være kort låst (typisk i en OneDrive-synkronisert mappe).</dd>
+    <dt>Årsak</dt><dd>Et tomt <code>catch {}</code> mellom lesing og skriving av samme datastruktur sluker feilen i stedet for å avbryte — hvis lesingen feiler stille, skrives det (eventuelt tomme) resultatet likevel tilbake, og opprinnelig innhold går tapt.</dd>
+    <dt>Løsning</dt><dd>Sjekk alle slike lese/skriv-tilbake-mønstre for stille <code>catch {}</code>-blokker; la en feilet lesing avbryte skrivingen i stedet for å fortsette med tomt/delvis resultat.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1-verktøy i dette økosystemet (registerfiler)</p>
+</div>
+
+<div class="gotcha" id="g-startprocess-mellomrom" data-cat="powershell">
+  <h4>Start-Process -ArgumentList med stier som har mellomrom</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En sti med mellomrom (svært vanlig i OneDrive-mapper, f.eks. «Dokumenter (UiO OD)») tolkes som flere separate argumenter.</dd>
+    <dt>Årsak</dt><dd><code>-ArgumentList</code> splitter på mellomrom med mindre hver sti er eksplisitt anførselstegn-omsluttet.</dd>
+    <dt>Løsning</dt><dd>Pakk hver sti i egne doble anførselstegn: <code>('"' + $sti + '"')</code>.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1, generelt (OneDrive-stier med mellomrom er standard i dette miljøet)</p>
+</div>
+
+<div class="gotcha" id="g-nyprosess-addtype" data-cat="powershell">
+  <h4>Hvert verktøykall er en ny PowerShell-prosess — Add-Type overlever ikke</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En .NET-klasse definert med <code>Add-Type</code> i ett script-kall er «borte» i et senere, tilsynelatende relatert kall.</dd>
+    <dt>Årsak</dt><dd>Hvert kall til et frittstående PowerShell-script/verktøy starter en HELT NY prosess, uten delt tilstand med forrige kall.</dd>
+    <dt>Løsning</dt><dd>Definer <code>Add-Type</code>-klasser i SAMME script-kall som faktisk bruker dem, aldri på tvers av separate kall.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1, generelt (relevant for hvordan AI-agenter selv bygger/tester disse installerne)</p>
+</div>
+
+<div class="gotcha" id="g-vba-kommentar-i-powershell" data-cat="powershell">
+  <h4>VBA-stil kommentarer i PowerShell, og heredoc-avslutning</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«String missing terminator»-feil ved bruk av <code>'</code> som kommentartegn i PowerShell (VBA-vane).</dd>
+    <dt>Årsak</dt><dd>PowerShell bruker <code>#</code> for kommentarer; en lone <code>'</code> starter i stedet en ubalansert streng.</dd>
+    <dt>Løsning</dt><dd>Bruk aldri <code>'</code>-kommentarer i PowerShell. For heredocs: den lukkende <code>'@</code> MÅ stå i kolonne 0 (ingen innrykk); bruk <code>@'…'@</code> (enkle anførselstegn) for VBA-kildekode nettopp FORDI <code>@"…"@</code> ekspanderer <code>$</code>-tegn, noe som ville ødelagt VBA-variabelnavn og lignende tekst.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1, generelt installer-mønster</p>
+</div>
+
+<div class="gotcha" id="g-lokaliserte-feilmeldinger" data-cat="powershell">
+  <h4>Norsk Windows gir lokaliserte feilmeldinger</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Regex-matching mot forventet engelsk feiltekst («Cannot run the macro …») finner ingenting.</dd>
+    <dt>Årsak</dt><dd>Feilmeldinger fra norsk Windows/Office er lokaliserte («Kan ikke kjøre makroen …», «Verdien kan ikke være null»).</dd>
+    <dt>Løsning</dt><dd>Regex-match aldri på engelsk feiltekst i et norsk miljø — bruk norske tekstfragmenter, eller match på feilkode/HRESULT i stedet for tekst der det er mulig.</dd>
+  </dl>
+  <p class="src">Kilde: PowerShell 5.1-verktøy i dette økosystemet</p>
+</div>
+
+<div class="gotcha" id="g-lokal-verifisering-for-installasjon" data-cat="installer">
+  <h4>Lokal verifisering dekker ikke VBA-syntaksfeil</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et script som validerer rent uten feil før installasjon, feiler likevel med en VBA-kompileringsfeil FØRST når Excel faktisk kjører koden.</dd>
+    <dt>Årsak</dt><dd><code>[ScriptBlock]::Create(...)</code> validerer kun PowerShell-LAGET rundt heredocen — den ser ALDRI inn i selve VBA-koden. VBA kompilerer først når koden faktisk eksekveres (se <a href="#g-application-run-form-method">bro-mønsteret</a> og <a href="#g-hengende-com-kall">kompileringsfeil-deteksjon</a>).</dd>
+    <dt>Løsning</dt><dd>Kjør BOM-sjekk + <code>[ScriptBlock]::Create</code> før HVER installasjon/kompilering som en første, billig sjekk — men stol ikke på at den fanger VBA-feil; åpne alltid minst ett skjema via <code>OnTime</code> etter installasjon for å tvinge frem faktisk VBA-kompilering og se etter en skjult feildialog.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-testrutinen</p>
+</div>
+
+<div class="gotcha" id="g-aldri-skjermbilde-basert" data-cat="process">
+  <h4>Aldri koordinatbasert skjermbilde-verifisering</h4>
+  <dl>
+    <dt>Symptom</dt><dd>To reelle personvernhendelser i dette prosjektets historie: et koordinatbasert skjermbilde (<code>CopyFromScreen</code> fra vindu-koordinater) fanget en gang et ekte kontaktdata-regneark og en annen gang en privat Teams-samtale — begge slettet umiddelbart.</dd>
+    <dt>Årsak</dt><dd>Å vite hvor et vindus RAMME er (via PID-sjekk) beviser ikke hva som faktisk ligger ØVERST på skjermen, spesielt med flere skjermer/vinduer i bruk samtidig.</dd>
+    <dt>Løsning</dt><dd>Bruk aldri skjermbilde-basert verifisering. Bruk i stedet UI Automation-tekst/<code>BoundingRectangle</code> innenfor et PID-verifisert vindu. Håkons EGNE skjermbilder sendt TIL sessionen er fint — regelen gjelder automatisert skjermfangst FRA sessionen.</dd>
+  </dl>
+  <p class="src">Kilde: prosjekthistorikk (Mail-utsender / en tidligere versjon)</p>
+</div>
+
+<div class="gotcha" id="g-aldri-ror-hovedfila" data-cat="process">
+  <h4>Aldri åpne, les eller rør Håkons ekte, levende filer</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Risiko for utilsiktet endring av eller innsyn i ekte, sensitive persondata.</dd>
+    <dt>Årsak</dt><dd>Håkons hovedarbeidsbok inneholder ekte kontakt-/persondata for prosjektet han bruker verktøyet i.</dd>
+    <dt>Løsning</dt><dd>All testing skjer i egne, oppdiktede test-/kastefiler. Håkon installerer og kjører selv på sin ekte fil, etter at et verktøy er bekreftet fungerende andre steder. Hvis Håkon selv åpner et verktøy i sin ekte fil mens man tester noe annet: vent på ham og be om lov før noe mer gjøres.</dd>
+  </dl>
+  <p class="src">Kilde: gjennomgående hard regel i hele prosjektet</p>
+</div>

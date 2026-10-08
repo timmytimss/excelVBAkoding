@@ -1,0 +1,167 @@
+<div class="gotcha" id="g-emi-w1-terminal-problemet" data-cat="process">
+  <h4>Windows 11/Terminal: skjult konsollvindu dukker likevel opp</h4>
+  <dl><dt>Symptom</dt><dd>Et ekstra Terminal-vindu/ikon dukker opp hver gang, uansett <code>-WindowStyle Hidden</code>.</dd>
+  <dt>Årsak</dt><dd>På Windows 11 (build 26200) kan ENHVER konsoll-subsystem-prosess (powershell.exe er alltid det) få sitt eget Windows Terminal-vindu/ikon, fordi <code>DelegationConsole</code>/<code>DelegationTerminal</code>-registernøklene ikke er satt (systemdefault lener mot Terminal-hosting). Utprøvd og forkastet: .ps1 + .lnk/VBS-wrapper — windowStyle 0 skjulte OGSÅ selve WinForms-vinduet (fordi Windows bruker den startende prosessens STARTUPINFO-visningsstatus som DEFAULT for prosessens aller første <code>ShowWindow</code>-kall, selv for et helt urelatert GUI-vindu som vises mye senere); windowStyle 1 + <code>-WindowStyle Hidden</code> løste WinForms-vinduet, men Terminal-problemet gjensto.</dd>
+  <dt>Løsning</dt><dd>ps2exe <code>-noConsole</code> — en ekte GUI-subsystem-.exe som aldri allokerer noen konsoll i utgangspunktet. Dette er hele grunnen til at EMI er en kompilert .exe og ikke en .ps1 + snarvei.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4 / minnefilen excel-macro-installer-launcher</p>
+</div>
+
+<div class="gotcha" id="g-emi-w2-psscriptroot-tom" data-cat="installer">
+  <h4>$PSScriptRoot er tom i en ps2exe-kompilert exe</h4>
+  <dl><dt>Symptom</dt><dd>Stiløsing som fungerer i rå .ps1-testing feiler i den kompilerte exe-en.</dd>
+  <dt>Årsak</dt><dd>En ps2exe-exe har ingen ekte skriptfil på disk lenger, så <code>$PSScriptRoot</code> er tom.</dd>
+  <dt>Løsning</dt><dd>Bruk <code>[System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName</code> i stedet. Selvoppdateringssjekken må i tillegg gardes bak et <code>$erKompilert</code>-flagg, siden <code>MainModule</code> under rå .ps1-testing peker på <code>powershell.exe</code> selv (ville gitt et falskt «ny versjon klar»-varsel).</dd></dl>
+  <p class="src">Kilde: MailUtsender del 2/4</p>
+</div>
+
+<div class="gotcha" id="g-emi-w3-autosize-label-height-null" data-cat="installer">
+  <h4>AutoSize-Label har Height=0 før den er lagt til i Controls</h4>
+  <dl><dt>Symptom</dt><dd>Overskrift/undertittel overlapper, filnavn/sti overlapper, makrorad-høyde feil, «installert»-tekst kuttet — rammet minst 4 ganger under bygging av EMIs kort-UI.</dd>
+  <dt>Årsak</dt><dd>En WinForms-Label med <code>AutoSize=$true</code> rapporterer <code>.Height=0</code> helt til den faktisk ER lagt til i et <code>Controls</code>-sett.</dd>
+  <dt>Løsning</dt><dd>Les alltid <code>.Height</code>/<code>.Bottom</code> og beregn alt som skal plasseres under ETTER <code>Controls.Add</code>, aldri før.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-w4-pille-badge-klipper-sifre" data-cat="installer">
+  <h4>Pille/badge-hjørner klipper sifre</h4>
+  <dl><dt>Symptom</dt><dd>Sifre i versjonspiller/statusbadger kuttes av de avrundede hjørnene.</dd>
+  <dt>Årsak</dt><dd>Radius satt til <code>Height/2</code> (full «stadion»-form) er større enn den innvendige paddingen.</dd>
+  <dt>Løsning</dt><dd>Fast radius 7 px + mer padding (Width+20, Height+12). <code>Set-RundedeHjorner</code> kalles ETTER endelig størrelse er satt, aldri før.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; funksjonen <code>Set-RundedeHjorner</code> i EMI-kilden</p>
+</div>
+
+<div class="gotcha" id="g-emi-w5-knappebredde-textrenderer" data-cat="installer">
+  <h4>Knappebredde med gjettede konstanter klipper teksten</h4>
+  <dl><dt>Symptom</dt><dd>Tekst som «Installer/oppdater» ble klippet på annen DPI/font enn den som ble testet på.</dd>
+  <dt>Årsak</dt><dd>Fast, gjettet bredde-konstant tar ikke hensyn til faktisk tekstbredde ved gjeldende font/DPI.</dd>
+  <dt>Løsning</dt><dd>Mål teksten med <code>TextRenderer.MeasureText</code> og legg til en fast margin, i stedet for en gjettet konstant bredde. Brukt i EMIs <code>Ny-Knapp</code>-hjelper.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-w6-dpi-awareness" data-cat="installer">
+  <h4>Uskarpt/strukket vindu på høy-DPI-skjerm</h4>
+  <dl><dt>Symptom</dt><dd>Hele EMI-vinduet ser uskarpt/strukket ut, som et forstørret bitmap.</dd>
+  <dt>Årsak</dt><dd>Uten eksplisitt DPI-awareness regner Windows programmet som «DPI-uvitende» og skalerer hele vinduet som et strukket bilde for å matche skjermens skalering (f.eks. 125 %).</dd>
+  <dt>Løsning</dt><dd>P/Invoke <code>SetProcessDpiAwarenessContext(-4)</code> (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) + <code>$form.AutoScaleMode = None</code>, kalt FØR noe som helst vindu/kontroll opprettes — helt øverst i skriptet.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 2/4; se EMI-kildens topp</p>
+</div>
+
+<div class="gotcha" id="g-emi-w7-sammensatte-kort-tag" data-cat="installer">
+  <h4>Sammensatte klikkbare kort: Tag må settes på hver barnekontroll</h4>
+  <dl><dt>Symptom</dt><dd>Klikk-hendelse treffer feil objekt eller finner ikke dataene den trenger.</dd>
+  <dt>Årsak</dt><dd>Avsenderen (<code>sender</code>) i en klikk-hendelse kan være en Label eller PictureBox inni kortet, ikke selve Panel-et — hvis bare Panel-et har fått <code>.Tag</code> satt, feiler oppslaget når et barn ble klikket.</dd>
+  <dt>Løsning</dt><dd>Sett <code>.Tag</code> på HVER barnekontroll individuelt, ikke bare på ytre Panel. Å rebygge en hel <code>FlowLayoutPanel</code> inni klikk-hendelsen til en knapp som selv «dør» i samme handling er verifisert trygt (standard WinForms-mønster).</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-w8-uia-begrensninger-winforms" data-cat="testing">
+  <h4>UI Automation-begrensninger for testing av EMI/WinForms</h4>
+  <dl><dt>Symptom</dt><dd>Automatisert klikk-testing bommer eller finner ingen brukbare elementer.</dd>
+  <dt>Årsak</dt><dd>UI Automation fungerer for LESING (Name/BoundingRectangle-trær) på WinForms, men <code>TabControl</code>-faner vises ikke som <code>TabItem</code>, og <code>Button</code> støtter ikke <code>InvokePattern</code>. MSForms/VBA-skjemaer eksponerer INGEN brukbart UIA-tre i det hele tatt (bare navnløse Panes). Koordinat-klikking uten kjent layout bommer.</dd>
+  <dt>Løsning</dt><dd>Faneskifte: <code>SetForegroundWindow</code> + <code>SendKeys ^{TAB}</code> (Ctrl+Tab, standard «neste fane»-snarvei). Ellers: test logikk-funksjoner isolert som ren PowerShell uten GUI, og les GUI-innhold (ikke klikk) via UIA på et PID-verifisert vindu.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; utdypet i minnefilen excel-macro-installer-launcher</p>
+</div>
+
+<div class="gotcha" id="g-emi-i1-gethicon-graa-silhuett" data-cat="installer">
+  <h4>Bitmap.GetHicon() -&gt; Icon.FromHandle gir grå silhuett</h4>
+  <dl><dt>Symptom</dt><dd>Et ikon med ekte per-piksel-alfa (transparent bakgrunn) rendres som en ensfarget GRÅ silhuett.</dd>
+  <dt>Årsak</dt><dd>Kjent GDI+-kvalitetsproblem i konverteringen fra Bitmap til klassisk Icon-handle når kilden har ekte alfakanal.</dd>
+  <dt>Løsning</dt><dd>Bruk <code>Format32bppArgb</code> og lagre som ekte BMP, håndbygg deretter ICO-en selv fra DIB-dataene (se I2/I3) i stedet for å gå via <code>GetHicon</code>/<code>Icon.FromHandle</code>.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; icon_generation_from_png_technique.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-i2-png-i-ico-krasjer" data-cat="installer">
+  <h4>PNG-komprimerte ICO-oppføringer krasjer System.Drawing.Icon</h4>
+  <dl><dt>Symptom</dt><dd>«Requested range extends past the end of the array» ved <code>new System.Drawing.Icon(path)</code>, selv om filen ser gyldig ut og Explorer viser den fint.</dd>
+  <dt>Årsak</dt><dd>Moderne 256×256-ikoner bruker PNG-komprimerte ICO-oppføringer, som ikke kan leses av .NETs <code>System.Drawing.Icon</code>-klasse — og EMI laster nettopp ikoner slik ved kjøretid.</dd>
+  <dt>Løsning</dt><dd>Bruk klassisk BMP/DIB-format i stedet: strip den 14-byte <code>BITMAPFILEHEADER</code>-en, behold <code>BITMAPINFOHEADER</code> + pikseldata, legg til en AND-maske (se I4).</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; icon_generation_from_png_technique.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-i3-biheight-dobling" data-cat="installer">
+  <h4>biHeight må skrives som DOBBEL pikselhøyde i en ICO</h4>
+  <dl><dt>Symptom</dt><dd>Ikonet laster UTEN feil, men leses som halv høyde (f.eks. 128×64 i stedet for 128×128) og ser klemt/squashet ut. Kan IKKE oppdages ved å se på en PNG lagret direkte fra Bitmap-objektet — bare ved å laste den FERDIGE .ico-filen tilbake. Trolig hva som gjorde en annen sessions ikoner «helt horrible».</dd>
+  <dt>Årsak</dt><dd><code>BITMAPINFOHEADER.biHeight</code> (offset 8 i DIB-en, 4-byte int) må i en ICO-fil være DOBBEL den faktiske pikselhøyden, selv om bare ett sett pikseldata + en AND-maske faktisk følger. En vanlig BMP lagret av GDI+ har korrekt, IKKE doblet høyde i dette feltet — kopieres den byte-for-byte inn i en ICO-beholder uten justering, deler .NETs ikonparser lagret <code>biHeight</code> på 2 og får feil svar. (biWidth ligger på offset 4, biHeight på offset 8 — en tidligere feil skrev dobbel høyde inn i BREDDE-feltet og ga 128×32.)</dd>
+  <dt>Løsning</dt><dd><code>[BitConverter]::ToInt32($dib,8)</code> × 2 -&gt; <code>GetBytes</code> -&gt; <code>[Array]::Copy</code> tilbake inn i offset 8 FØR ICO-en settes sammen. VERIFISER ALLTID ved å laste den ferdige .ico med <code>New-Object System.Drawing.Icon</code>, sjekke at <code>.Width</code>/<code>.Height</code> faktisk er 128/128, og lagre <code>.ToBitmap()</code> som PNG og se på DEN — aldri bare på en PNG lagret rett fra det in-memory Bitmap-objektet, den ruten tester ikke selve ICO-koden i det hele tatt.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; icon_generation_from_png_technique.md (kalt «THE bug»)</p>
+</div>
+
+<div class="gotcha" id="g-emi-i4-and-maske-fra-alpha" data-cat="installer">
+  <h4>AND-masken må bygges fra ekte per-piksel alfa</h4>
+  <dl><dt>Symptom</dt><dd>Gjennomsiktige områder i kildebildet blir ikke gjennomsiktige i det ferdige ikonet.</dd>
+  <dt>Årsak</dt><dd>En ICO trenger en egen AND-maske (1 bit per piksel) i tillegg til selve fargedataene; den bygges ikke automatisk fra alfakanalen.</dd>
+  <dt>Løsning</dt><dd>Les faktisk alfa via <code>LockBits</code>; alfa &lt; 128 = maskert bit. Maskeradene er bunn-opp som resten av DIB-en, og hver rad må paddes til en 4-byte-grense.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; icon_generation_from_png_technique.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-i5-farge-kontrast-mot-motiv" data-cat="installer">
+  <h4>Bakgrunnsfarge må kontrastere mot ikonets motiv</h4>
+  <dl><dt>Symptom</dt><dd>To ikoner i samme sett så ut som SAMME farge side om side; en annen bakgrunnsfarge visket nesten ut selve motivet.</dd>
+  <dt>Årsak</dt><dd>Et første utkast ga Nettskjema-henter en indigo bakgrunn (RGB 165,180,252 → 55,48,163) som side om side leste som samme farge som Kolonnevelgers lilla. Generelt: samme-farge-på-samme-farge (gul bak et gult dokument, turkis bak grønne streker, blått bak et blått hodesett) visker ut motivet — mistenkt årsak til at en annen sessions ikonforsøk ble kalt «helt horrible».</dd>
+  <dt>Løsning</dt><dd>Velg alltid en bakgrunnsfarge som KONTRASTERER mot motivets dominante farger, ikke bare en farge som «passer til paletten». Sjekk alltid HELE settet side om side før levering, ikke bare hvert ikon isolert. Nettskjema-henter endret fra indigo til teal etter at Håkon la merke til kollisjonen visuelt.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 2; icon_generation_from_png_technique.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-f1-onedrive-synklaas" data-cat="process">
+  <h4>OneDrive-synklås ved les-etter-skriv</h4>
+  <dl><dt>Symptom</dt><dd>En lesing rett etter egen skriving av samme JSON-fil kolliderer med OneDrives synk-lås.</dd>
+  <dt>Årsak</dt><dd>OneDrive kan kortvarig låse en fil rett etter at den nettopp ble skrevet, i det tidsvinduet en lese-tilbake-verifisering rammer.</dd>
+  <dt>Løsning</dt><dd>Se retry-mønsteret i <a href="#g-emi-p9-stille-catch-datatap">P9-gotchaen</a> (5 forsøk × 150 ms + verifiseringsflagg).</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-f2-katalog-i-bruk-flytting" data-cat="process">
+  <h4>Å flytte en HEL katalog kan feile selv etter omstart</h4>
+  <dl><dt>Symptom</dt><dd>«Ressurs i bruk» ved forsøk på å flytte en prosjektmappe, selv etter full Windows-restart.</dd>
+  <dt>Årsak</dt><dd>En prosess (trolig Claude Code-appen selv) holder katalogen som sin egen «current working directory»/håndtak, og dette overlever tilsynelatende restart via sesjonsgjenoppretting.</dd>
+  <dt>Løsning</dt><dd>Flytt FILENE enkeltvis til den nye mappa i stedet for å flytte selve katalogen som én enhet; be Håkon slette den gjenstående tomme skallmappa etter full avslutning av appen. Relevant hvis/når EMI-mappa selv skal flyttes til den planlagte nye plasseringen (se mappestruktur-avsnittet).</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-f3-minne-folger-ikke-change-directory" data-cat="process">
+  <h4>Claude-minne følger IKKE med change_directory</h4>
+  <dl><dt>Symptom</dt><dd>En ny økt på ny sti starter helt uten tidligere lærdom, som om ingenting noensinne var lært.</dd>
+  <dt>Årsak</dt><dd>Ny cwd starter en helt ny, TOM minnemappe (<code>.claude\projects\&lt;hash-av-sti&gt;\memory\</code>) — minnefilene fra den gamle stien flytter ikke automatisk med.</dd>
+  <dt>Løsning</dt><dd>Kopier alle .md-minnefiler manuelt til den nye minnemappa (wiki-lenker mellom dem bruker bare slugs, så de virker fortsatt etter ren fil-kopiering). Når prosjektmapper senere slettes/flyttes ligger minnefilene fortsatt fysisk på disk under den gamle hash-mappa, men blir «foreldreløse» — kopier dem UT før sletting.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4; current_file_locations.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-f4-ingen-auto-discovery" data-cat="installer">
+  <h4>Ingen auto-discovery av mål-.xlsm — la mennesket velge hver gang</h4>
+  <dl><dt>Symptom</dt><dd>En tidlig versjon som auto-valgte «den ene» .xlsm-fila i en kjent mappe oppdaterte ved en anledning feil kopi av fila, uten at noen merket det med det samme.</dd>
+  <dt>Årsak</dt><dd>Mappe-/filplassering skifter hele tiden (OneDrive/SharePoint/Teams-bibliotek), og samme fil kan finnes i flere kopier/aliaser samtidig (se <a href="#g-emi-fil-apen-to-ganger">fil-åpen-to-ganger-gotchaen</a>) — ingen automatikk kan pålitelig avgjøre hvilken som er «riktig».</dd>
+  <dt>Løsning</dt><dd>La mennesket velge fil via eksplisitt <code>OpenFileDialog</code> hver eneste gang, aldri auto-velg. En hel dags feilsøking av «installer oppdaterte feil kopi» er grunnen til denne regelen — gjelder EMI så vel som alle plugin-makroene.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4/5; excel-vba-installer-pattern.md</p>
+</div>
+
+<div class="gotcha" id="g-emi-s1-aldri-skjermbilde-verifisering" data-cat="testing">
+  <h4>Aldri skjermbilde-basert verifisering av UI</h4>
+  <dl><dt>Symptom</dt><dd>To personvernhendelser: et blindt skjermbilde (CopyFromScreen fra vindu-koordinater) fanget en ekte kontaktdata-regnearkfil og en privat Teams-samtale.</dd>
+  <dt>Årsak</dt><dd>En PID-sjekk beviser bare hvor et vindus RAMME er, ikke hva som faktisk ligger øverst på skjermen — spesielt på multiskjerm-oppsett kan et helt annet, sensitivt vindu ligge over det man mente å fange.</dd>
+  <dt>Løsning</dt><dd>Bruk aldri skjermbilde-basert verifisering. Bruk UI Automation (tekst/BoundingRectangle) innenfor et PID-verifisert vindu i stedet. Håkons egne skjermbilder TIL Claude er greit å motta og bruke. Begge hendelsene ble slettet umiddelbart. Fysisk styring av ekte musepeker (mouse_event) er gjort én gang, kun etter eksplisitt samtykke, med lagret/gjenopprettet markørposisjon.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4, hard sikkerhetsregel</p>
+</div>
+
+<div class="gotcha" id="g-emi-s2-aldri-ror-hovedfila" data-cat="process">
+  <h4>Aldri rør Hovedarbeidsboken.xlsm</h4>
+  <dl><dt>Symptom</dt><dd>(regel, ikke hendelse) — risiko for å skade eller forvirre Håkons eneste ekte produksjonsfil.</dd>
+  <dt>Årsak</dt><dd>Hovedarbeidsboken.xlsm er levende produksjonsdata Håkon selv eier og styrer.</dd>
+  <dt>Løsning</dt><dd>Rør den aldri; Håkon installerer selv, via EMI, på sin egen ekte fil. Test alltid mot isolerte Testfil-kopier i scratchpad.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4, hard sikkerhetsregel</p>
+</div>
+
+<div class="gotcha" id="g-emi-s3-tvetydig-norsk-tilbakemelding" data-cat="process">
+  <h4>Tvetydig norsk tilbakemelding om delt dokumentasjon</h4>
+  <dl><dt>Symptom</dt><dd>En feiltolket, tvetydig tilbakemelding («Kjetil misforstår at X og Y er samme prosjekt») førte til at en gal «korrigering» ble sendt til en peer-session (Kjetil), som Håkon måtte tilbakestille.</dd>
+  <dt>Årsak</dt><dd>Norsk tilbakemelding om delt dokumentasjon kan tolkes på minst to måter, og feil tolkning ble handlet på uten å sjekke.</dd>
+  <dt>Løsning</dt><dd>Ved tvetydig tilbakemelding om delt dokumentasjon: sjekk med Håkon FØR man handler overfor en peer-session.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>
+
+<div class="gotcha" id="g-emi-s4-instrumenter-i-stedet-for-gjetting" data-cat="testing">
+  <h4>Instrumenter og les tilstand utenfra, ikke ren kodegjetting</h4>
+  <dl><dt>Symptom</dt><dd>Flere runder ren kodegjetting (inkl. en feil teori om Windows fokus-tyveri der AppActivate ikke hjalp) løste ikke en reell bug.</dd>
+  <dt>Årsak</dt><dd>Uten instrumentering er det umulig å skille mellom flere konkurrerende teorier om hva som faktisk skjer.</dd>
+  <dt>Løsning</dt><dd>MsgBox-brødsmuler (nummererte, be Håkon rapportere hvilke han ser) fant den faktiske Unload-Me-buggen på én runde, etter at flere runder ren kodegjetting ikke hadde funnet noe. Instrumenter og les tilstand utenfra fremfor å resonnere seg frem.</dd></dl>
+  <p class="src">Kilde: MailUtsender del 4</p>
+</div>

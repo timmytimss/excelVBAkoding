@@ -1,0 +1,78 @@
+<section id="arbeidsmodell" data-nav="Oversikt|Arbeidsmodell: lokal + sky-session">
+  <h2>Arbeidsmodell: lokal session + sky-session</h2>
+  <p class="lead">Forslag til hvordan de to nye, generelle kode-sessionene (én lokal, én skybasert) bør dele arbeidet, samarbeide, og bruke agenter/ressurser fornuftig. Dette er et forslag til diskusjon, ikke en fasit — juster gjerne før det tas i bruk.</p>
+
+  <h3>Hvorfor to sessioner med ulik rolle, ikke to like</h3>
+  <p>Den mest naturlige arbeidsdelingen følger en teknisk realitet: <strong>bare en session som kjører direkte på Håkons egen maskin kan faktisk snakke med en ekte, kjørende Excel/Outlook-instans via COM.</strong> En skybasert/ekstern session har ingen slik tilgang i utgangspunktet. I stedet for å se dette som en begrensning, er det en gratis sikkerhetsgrense verdt å bygge arbeidsdelingen rundt:</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>Lokal session («kodearbeider»)</h4>
+      <p>Kjører på Håkons egen maskin, med faktisk filsystem- og Excel/Outlook-tilgang. Eier alt som krever LIVE-testing: kjøre installer-scriptene mot en ekte Excel-prosess, kompileringssjekk via VBE, ta ekte skjermbilder (med bekreftelse først), rekompilere EMI med <code>ps2exe</code>. Den eneste av de to som noensinne bør røre COM-automatisering.</p>
+    </div>
+    <div class="card">
+      <h4>Sky-session («dokumentasjon/planlegging»)</h4>
+      <p>Ingen lokal Excel/Outlook-tilgang — strukturelt umulig for den å bryte personvernregelen om å røre ekte data, uansett hva den blir bedt om. Godt egnet til: lese/skrive/refaktorere VBA- og PowerShell-KILDETEKST (uten å kjøre den), oppdatere denne HTML-siden, større flerfil-gjennomganger, research, og å sette i gang parallelle subagenter for skrive-/analysetunge oppgaver uten å konkurrere om den ene levende Excel-instansen den lokale sessionen bruker.</p>
+    </div>
+  </div>
+  <p>Har Håkon en sky-session kjørende fra en ANNEN fysisk PC (som også synker samme OneDrive-mappe) i stedet for en ren sandkasse, gjelder samme rolledeling likevel — den sessionen har fortsatt ikke Håkons hoved-Excel/Outlook-instans tilgjengelig, og bør derfor holde seg til samme «dokumentasjon/planlegging»-rolle med mindre Håkon eksplisitt ber om noe annet fra den maskinen.</p>
+
+  <h3 id="arbeidsmodell-git">Git/GitHub som broen mellom lokal og sky — og som backup</h3>
+  <div class="callout note"><strong>Vedtatt 2026-09-22:</strong> Håkons skybaserte Claude Code-session («Hei», senere ment å bli den nye «Kjetil») har sin base i et privat GitHub-repo (<code>actualpope/excelVBAkoding</code>), ikke i OneDrive. Dette er ikke valgfritt — Claude Code sine sky-«environments» kjører alltid mot et git-repo, de kan strukturelt ikke montere en nettverksmappe som OneDrive i det hele tatt.</div>
+  <p>Praktisk konsekvens: en sky-session kan ALDRI selv hente noe fra OneDrive-mappa — den har bare det noen med lokal tilgang har <code>git push</code>-et dit. «Backup»-egenskapen virker altså kun så lenge noen (den lokale sessionen, eller Håkon selv) faktisk pusher jevnlig. Anbefalt mønster:</p>
+  <ul>
+    <li>En lokal git-arbeidskopi ligger UTENFOR den OneDrive-synkede mappetreet (f.eks. <code>Documents\excelVBAkoding-git\</code>) — å legge <code>.git\</code> inni en OneDrive-synket mappe risikerer akkurat den typen fil-lås-konflikt som er dokumentert flere ganger i <a href="#ref-gotchas">Kjente fallgruver</a> (OneDrive prøver å synke gits interne filer samtidig som git skriver til dem).</li>
+    <li>Repoet er en FULL, rå kopi av hele <code>Excel VBA Koding\</code>-mappa (inkl. testfiler, kompilert <code>.exe</code>, ikoner, hele <code>_overlevering\</code>-arkivet) — ved denne skalaen (ca. 5–6 MB totalt, under 200 filer) er det ingen praktisk kostnad ved å ta med alt, og formålet er nettopp backup + at Håkon kan nå de samme lærdommene fra fritida si, ikke bare en minimal kildekode-delmengde.</li>
+    <li>Når noe endres i den ekte, kjørende <code>Excel Macro Installer\</code>-mappa (ny makroversjon, oppdatert HTML-side) bør den lokale sessionen periodisk kopiere endringene inn i git-arbeidskopien og pushe — samme «rediger i utviklingsmappa, kopier til driftsmappa ved oppdatering»-vane som allerede gjaldt for flere av makroene, bare med ekte versjonshistorikk nå i stedet for løse fil-kopier.</li>
+    <li>Git-operasjoner (commit/push/pull) koster ingen Claude-«usage» — det er bare filoperasjoner. En sky-session koster det samme per token som en lokal, men kan aldri gjøre den tunge, dyre Excel-COM-testingen (skjermbilder, PrintWindow) siden den ikke har Excel i det hele tatt — naturlig lettere å bruke, ikke tyngre.</li>
+  </ul>
+
+  <h3>Hvordan de samarbeider</h3>
+  <ul>
+    <li><strong>Filer er det delte språket, ikke samtalehistorikk.</strong> De to sessionene deler ingen samtale — alt de skal koordinere om må enten stå i en fil begge leser (kode, denne HTML-siden, en statusnotat i <a href="#prosjektfiler-orientering">Prosjektfiler</a>), eller sendes eksplisitt som en melding mellom sessionene (Claude Code støtter cross-session-meldinger mellom navngitte sessioner på samme maskin/konto — akkurat slik «Kjetil» koordinerte de seks nedlagte makro-sesjonene under denne omstruktureringen).</li>
+    <li><strong>Typisk flyt for en kodeendring:</strong> sky-sessionen (eller hvem som helst) skriver/endrer VBA/PowerShell-kildekoden og oppdaterer dokumentasjonen → melding til den lokale sessionen: «test denne endringen mot Testfiler, gi beskjed om resultat» → lokal session installerer, kjører kompileringssjekk, tester, og melder tilbake pass/fail med konkret feilbeskrivelse → sky-sessionen retter ved behov. Motsatt vei fungerer like godt: lokal session finner en bug ved ekte klikk-testing, sender en presis feilbeskrivelse til sky-sessionen for rotårsaksanalyse og skriving av en ny fallgruve-oppføring mens lokal session går videre med annet.</li>
+    <li><strong>Før noen starter noe stort:</strong> sjekk om den andre sessionen allerede jobber med det samme (spør Håkon, eller send en rask melding til den andre sessionen om hva som er i gang), særlig siden begge kan ha tilgang til samme filer samtidig og usynkroniserte endringer på samme fil er den vanligste kilden til bortkastet arbeid.</li>
+  </ul>
+
+  <h3 id="arbeidsmodell-usage">Å bruke Håkons tilgjengelige ressurser («usage») fornuftig</h3>
+  <ul>
+    <li><strong>Les denne siden som et oppslagsverk, ikke i sin helhet.</strong> Se <a href="#arbeidsmodell-oppslagsverk">neste avsnitt</a> — dette er trolig det enkelttiltaket som sparer mest, siden siden i seg selv er stor og vokser.</li>
+    <li><strong>Match verktøybruk til oppgavestørrelse.</strong> En liten, presist avgrenset endring: gjør den direkte, ikke sett opp en subagent for den. En stor, uavhengig delelig oppgave (som å dokumentere seks makroer parallelt, eller vaske et gjennomgående ord fra 26 filer): foreslå delegering til subagent(er) — <strong>men spør Håkon først hver gang</strong>, det er hans eksplisitte, stående regel.</li>
+    <li><strong>Skriv målrettede endringer, ikke full ombygging, for små justeringer av HTML-siden.</strong> Denne siden ER bygget av sammenslåtte fragmenter (se <code>Prosjektfiler\_bygg\SPEC.md</code> og <a href="#kjetil-lardom">Kjetils lærdom</a> om hvorfor), men det er en byggeMETODE for STORE omskrivinger — en liten endring (fikse en feil, legge til én fallgruve, rette en tallfeil) bør gjøres med et direkte, presist tekstsøk-og-erstatt rett i den ferdige <code>Excel VBA Koding.html</code>, ikke ved å gjenoppbygge hele siden fra fragmenter. Fragment+subagent-metoden er for store, samtidige omskrivninger på tvers av mange seksjoner.</li>
+    <li><strong>Test i forhold til endringens størrelse</strong> (se <a href="#arbeidsprosess-usage">Arbeidsprosess</a>) — samme prinsipp gjelder testing som bruk av agenter og lesing av dokumentasjon: gjør nok til å være trygg, ikke mer.</li>
+    <li><strong>Gjenbruk faste testfiler</strong> i stedet for å lage og slette nye for hver testrunde — se <a href="#arbeidsprosess-testfiler">testfil-filosofien</a> under.</li>
+  </ul>
+
+  <h3 id="arbeidsmodell-oppslagsverk">Skal en AI lese hele siden, eller bruke den som oppslagsverk?</h3>
+  <p><strong>Oppslagsverk — ikke full gjennomlesning ved hver sesjonsstart.</strong> Siden er allerede over 700 KB og vokser for hver ny lærdom som legges til; å lese hele fila inn i kontekst hver gang en ny session starter er både unødvendig og direkte i strid med ønsket om bevisst ressursbruk over.</p>
+  <p>Anbefalt mønster, og det som faktisk er satt opp til å fungere slik (se <code>CLAUDE.md</code> i prosjektroten, som enhver Claude Code-session i denne mappen leser automatisk ved oppstart):</p>
+  <ol>
+    <li><strong>Les kun innledningen</strong> (de tre første seksjonene: «Om denne siden», «Hvordan Håkon liker å jobbe», «Kjetil — hva koordinatorrollen har lært») ved første gangs onboarding av en ny session — dette er noen titalls KB, ikke hele siden.</li>
+    <li><strong>Bruk siden som et levende oppslagsverk under selve arbeidet:</strong> når man skal jobbe med en spesifikk makro, feilsøke noe konkret, eller sjekke en arkitekturdetalj — søk (<code>Grep</code>-verktøyet, eller nettleserens Ctrl+F/den innebygde søkefunksjonen med Ctrl+K på selve siden) etter makronavnet, feilmeldingen, funksjonsnavnet eller kontrollnavnet man lurer på, og les KUN den relevante seksjonen (identifisert ved linjenummer fra søket, lest med et avgrenset <code>offset</code>/<code>limit</code>).</li>
+    <li>Hver seksjon/fallgruve/teknikk har en stabil, beskrivende <code>id</code> (f.eks. <code>id="g-listbox-click-never-fires"</code>, <code>id="mac-nettskjema-arkitektur"</code>) — disse endres ikke selv om resten av siden vokser, så de er trygge å referere til direkte (både i lenker og i søk) fra en gang til en annen.</li>
+    <li>Oppdager man noe som IKKE står i siden mens man jobber — en ny fallgruve, en endret arkitekturdetalj — legg det til der og da (målrettet, se over), ikke bare i egen hukommelse. Siden er ubrukelig som «kollektivt minne» hvis ikke alle sessioner faktisk skriver tilbake til den.</li>
+  </ol>
+  <div class="callout note">Praktisk konsekvens: en session som bare skal fikse én liten ting i én makro, trenger kanskje aldri å lese mer enn innledningen + ett enkelt søketreff — ikke syv-åtte hundre kilobyte tekst om fem andre makroer den ikke rører.</div>
+
+  <h3 id="prosjektfiler-orientering">Bruk av <code>Prosjektfiler</code>-mappen</h3>
+  <p>Full sti: <code>C:\Users\haaklun\OneDrive - Universitetet i Oslo\Dokumenter (UiO OD)\Claude (nettbasert)\Excel VBA Koding\Prosjektfiler</code>. Dette er stedet for alt arbeid som ikke er selve den ferdige HTML-siden eller EMI-kildekoden. Undermapper og deres formål:</p>
+  <table>
+    <thead><tr><th>Mappe</th><th>Formål</th><th>Hvem skriver hit</th></tr></thead>
+    <tbody>
+      <tr><td><code>Testfiler\</code></td><td>Varige, gjenbrukbare test-arbeidsbøker (se testfil-filosofien under) — IKKE éngangs kastefiler.</td><td>Primært lokal session (trenger Excel for å faktisk bruke dem), men begge kan opprette/planlegge nye.</td></tr>
+      <tr><td><code>Ikke-utgitte makroer\</code></td><td>Kildekode for moduler under utvikling som ikke er lagt inn i <code>Excel Macro Installer\Macros\</code> ennå.</td><td>Begge — flytt til <code>Macros\</code> når modulen er klar for EMI, og oppdater status i HTML-siden samtidig.</td></tr>
+      <tr><td><code>_overlevering\</code></td><td>Historisk arkiv fra de seks nedlagte makro-sesjonene (rå overleveringstekst, kopierte minnefiler, gamle testskript). Oppslagsverk for detaljer denne HTML-siden har komprimert bort — les herfra kun ved behov, ikke rutinemessig.</td><td>Ingen — betraktes som frosset historikk.</td></tr>
+      <tr><td><code>_bygg\</code></td><td><code>SPEC.md</code> (klassekontrakten for HTML-fragmenter) + alle fragmentfilene HTML-siden er satt sammen av. Brukes ved STORE, flerseksjons ombygginger av siden (se over) — ikke ved små endringer, som gjøres direkte i den ferdige fila.</td><td>Den sessionen som gjør en stor ombygging; hold fragmentene i synk med den ferdige fila eller aksepter at de blir utdatert dokumentasjon-om-byggeprosessen (mindre kritisk enn selve HTML-siden).</td></tr>
+    </tbody>
+  </table>
+  <p>Har man behov for en ny, permanent kategori arbeidsfiler som ikke passer i noen av disse — lag en ny, tydelig navngitt undermappe fremfor å blande formål inn i en eksisterende, og nevn den kort her (rett i denne HTML-siden) slik at neste session forstår hva den er for.</p>
+
+  <h3 id="arbeidsprosess-testfiler">Testfil-filosofi: varige testfiler, ikke éngangs kastefiler</h3>
+  <p>Håkons eksplisitte tilbakemelding (2026-09-22): den historiske praksisen — dokumentert gjennomgående i <a href="#ref-testing">Testteknikker</a> og en rekke fallgruver — med å lage en fersk, midlertidig «kastefil» for hver testrunde og slette den etterpå, oppleves som tungvint i lengden. Foretrukket praksis fremover:</p>
+  <ul>
+    <li><strong>Ha noen få, VARIGE testfiler</strong> i <code>Prosjektfiler\Testfiler\</code> som ligger der permanent og gjenbrukes gang på gang — installer/oppdater/avinstaller-sykluser kjøres mot DEM, i stedet for å lage en ny fil hver gang.</li>
+    <li>Det er helt greit å lage <strong>FLERE</strong> testfiler for ulike formål/scenarioer (f.eks. én med mange rader for ytelsestesting, én med bevisst mangelfulle data for feilsøkingstesting) — poenget er varighet per fil, ikke ett-fil-for-alt.</li>
+    <li>En varig testfil bør tåle å bli «testet i alle kanter, kontinuerlig»: installer flere makroer i den samtidig, oppgrader dem gjentatte ganger, avinstaller og reinstaller — akkurat som en ekte arbeidsbok over tid, fremfor en blankt-ark-fil som kun brukes én gang.</li>
+    <li>Lag en ny testfil kun når en eksisterende faktisk er blitt korrupt/ubrukelig, eller når man trenger en genuint annerledes datastruktur enn det noen eksisterende fil har.</li>
+    <li>Dette var allerede etablert som en enkelt makros preferanse tidligere (Kontaktsentralen, 2026-09-11) — det gjelder nå som en generell regel for ALLE moduler.</li>
+  </ul>
+</section>

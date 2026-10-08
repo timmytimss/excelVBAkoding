@@ -1,0 +1,20 @@
+Thumbs.db
+desktop.ini
+
+# Local-per-PC EMI state, not portable across machines (verified by Eva 2026-09-22:
+# Excel Macro Installer.ps1 already handles a missing file as an empty register).
+# Old committed copies stay in history — Håkon decided to leave that be.
+Excel Macro Installer/Data/installed-files.json
+Excel Macro Installer/Data/known-files.json
+
+# Holdes utenfor det offentlige repoet (ligger kun i OneDrive-prosjektet) - vedtatt 2026-10-08
+# da repoet ble gjort offentlig. Inneholder minnefiler, overleveringsnotater med personopplysninger
+# og infrastrukturdetaljer. Full historikk for 2026-10-08 ligger som git-bundle i _beredskap (ogsa ignorert).
+Prosjektfiler/_overlevering/
+Prosjektfiler/_beredskap/minne-backup/
+Prosjektfiler/_beredskap/*.bundle
+Prosjektfiler/Kontoflytting/
+Prosjektfiler/_publisering/README-dist.md
+Excel Macro Installer/*.bak-*
+Excel Macro Installer/Data/WebView2UserData/
+**/*.gammel

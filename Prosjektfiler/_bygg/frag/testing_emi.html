@@ -1,0 +1,29 @@
+<div class="technique" id="t-emi-isolert-logikktest">
+  <h4>Test logikkfunksjoner isolert som ren PowerShell, uten GUI</h4>
+  <p>Kjør EMI-kildens datafunksjoner (<code>Les-InstallertRegister</code>, <code>Oppdater-InstallertRegister</code>, <code>Hent-Makroliste</code>, <code>Finn-Versjon</code> osv.) direkte fra en test-.ps1 som dot-sourcer eller kopierer inn de aktuelle funksjonene, uten å bygge noe WinForms-vindu i det hele tatt. Dette er hvordan de to farligste EMI-buggene faktisk ble funnet: <a href="#g-emi-p3-tom-liste-unrolles">unroll-bugen</a> (tom/ett-elements <code>List[object]</code> som ble <code>$null</code>) og <a href="#g-emi-p4-convertto-json-list">JSON-bindingsbugen</a> (<code>ConvertTo-Json</code> på en ekte generisk List). Verifiser «nekt å skrive»-grenen i <a href="#g-emi-p9-stille-catch-datatap">datatap-fiksen</a> ved bevisst å ødelegge en KOPI av registerfilen og bekrefte at (a) funksjonen returnerer «AVBRUTT — skrev IKKE» og (b) den korrupte filens innhold er helt urørt etterpå — aldri test mot ekte registerdata.</p>
+</div>
+
+<div class="technique" id="t-emi-enumwindows-probe">
+  <h4>EnumWindows-probe: bekreft ett rent vindu, ingen konsoll</h4>
+  <p>Etter hver kompilering av EMI: start den ferske .exe-en og bruk en <code>EnumWindows</code>/<code>EnumChildWindows</code>-probe (P/Invoke, filtrert på prosessens PID) til å bekrefte at det finnes NØYAKTIG ETT synlig vindu (selve WinForms-vinduet) og INGEN konsoll-/Terminal-vindu ved siden av. Dette er den konkrete verifiseringen bak <a href="#g-emi-w1-terminal-problemet">Terminal-problemet</a> — en ren oppstart bekrefter at <code>-noConsole</code>-kompileringen faktisk virket. Lukk vinduet selv etterpå.</p>
+</div>
+
+<div class="technique" id="t-emi-uia-lesing-ikke-klikk">
+  <h4>UI Automation for LESING av WinForms-innhold, ikke for klikking</h4>
+  <p>Les rendret innhold (Name/BoundingRectangle-tre) med <code>System.Windows.Automation</code> på et PID-verifisert vindu — dette fungerer pålitelig for WinForms (tekst, versjon, dato, beskrivelse, kortstørrelser) og er slik avstand mellom kort (bunn-Y på ett kort vs. topp-Y på neste) er bevist med ekte lange beskrivelser/stier, ikke bare korte test-strenger. Se derimot <a href="#g-emi-w8-uia-begrensninger-winforms">UIA-begrensningene</a> for hvorfor faktisk KLIKKING må gjøres annerledes: <code>TabControl</code>-faner vises ikke som <code>TabItem</code>, og <code>Button</code> støtter ikke <code>InvokePattern</code>. For faneskifte: <code>SetForegroundWindow</code> på vinduets handle, deretter <code>[System.Windows.Forms.SendKeys]::SendWait("^{TAB}")</code> (Ctrl+Tab) — pålitelig og krever ingen koordinat-gjetting. For alt annet klikk-drevet: bruk en midlertidig, kjent testverdi (f.eks. en falsk sti i <code>known-files.json</code>) og verifiser resultatet gjennom lesing etterpå, ikke gjennom å stole på at klikket «traff».</p>
+</div>
+
+<div class="technique" id="t-emi-negativ-kontroll">
+  <h4>Kjør alltid en negativ kontroll før du stoler på en «ren» sjekk</h4>
+  <p>En kompileringssjekk eller BOM/syntaks-verifisering (<code>[ScriptBlock]::Create(...)</code>) som aldri er testet mot et KJENT feil tilfelle, kan ikke skilles fra en sjekk som bare aldri finner noe. Bygg en scratchmodul med en kjent, bevisst feil først og bekreft at verktøyet faktisk oppdager den, før du stoler på et «OK»-resultat på ekte kode. Gjelder også kompileringssjekker av de VBA-baserte plugin-makroene EMI installerer (Excel-siden av kompileringen skjer helt separat fra EMIs egen PowerShell-lag-sjekk).</p>
+</div>
+
+<div class="technique" id="t-emi-versjon-og-lasesjekk-rutine">
+  <h4>Fast rutine hver gang før installasjon/kompilering</h4>
+  <p>BOM-sjekk (byte 1–3 = EF BB BF) + <code>[ScriptBlock]::Create((Get-Content -Raw -Encoding UTF8 &lt;kilde&gt;))</code> — validerer kun PowerShell-laget, ikke VBA-en. For EMI spesifikt, i tillegg: grep <code>$LauncherVersion</code>-verdien og bekreft den er lik den <code>-version</code>-strengen som skal brukes i <code>Invoke-ps2exe</code>-kommandoen, RETT FØR hver kompilering (en glemt bump ga tidligere et falskt «ny versjon klar»-banner). Sjekk <code>Get-Process "Excel Macro Installer"</code> og be Håkon lukke programmet hvis det kjører — filen er låst mens den kjører.</p>
+</div>
+
+<div class="technique" id="t-emi-eksterne-installere-uten-a-rore-excel">
+  <h4>Test EMIs plugin-makroer uten å røre Håkons Excel</h4>
+  <p>For å teste hvordan flere av EMIs plugin-makroer (Kolonnevelger, Mail-utsender, Kontaktsentralen, Makromeny, Nettskjema-henter) fungerer sammen i samme arbeidsbok uten å risikere Håkons ekte, åpne Excel: kopiér hver installer-.ps1 til scratchpad og bytt ut <code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code>-kallet med noe som tvinger feilbanen (f.eks. <code>throw 'x'</code>), slik at installeren faller tilbake til <code>New-Object -ComObject Excel.Application</code> — en egen, isolert instans. La instansen stå åpen mellom installasjonene, bind til den med <code>[Marshal]::BindToMoniker(fil)</code>, verifiser komponenter/knapper/ThisWorkbook-blokker etter hver, og lukk kun denne egne instansen (aldri en prosess man ikke selv startet) til slutt.</p>
+</div>

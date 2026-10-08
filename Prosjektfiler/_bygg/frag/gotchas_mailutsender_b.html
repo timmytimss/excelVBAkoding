@@ -1,0 +1,109 @@
+<div class="gotcha" id="g-frame-children-com" data-cat="powershell">
+  <h4>Frame-barn må legges til via Frame.Controls.Add, ikke Designer.Controls.Add</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kontroller ment å ligge inne i en <code>Forms.Frame.1</code> havner i stedet direkte på skjemaet, ikke ramme-relativt.</dd>
+    <dt>Årsak</dt><dd><code>$form.Designer.Controls.Add(...)</code> legger alltid til på selve skjemaet. Det som faktisk gjør en kontroll til et barn av rammen (posisjonert relativt til den, forsvinner/vises med den) er å kalle <code>.Add(...)</code> på selve Frame-objektet: <code>$frame.Controls.Add(...)</code>.</dd>
+    <dt>Løsning</dt><dd>Bruk konsekvent <code>$frame.Controls.Add(...)</code> for alle kontroller som skal være ramme-barn, i alle installer-script som bygger UserForms via COM.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett</p>
+</div>
+
+<div class="gotcha" id="g-font-bold-ps1-com" data-cat="powershell">
+  <h4>.Font.Bold via PowerShell-COM krasjer (NullReferenceException); trygt fra VBA</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Å sette <code>.Font.Bold</code> (eller en annen <code>.Font.*</code>-underegenskap) på en UserForm-kontroll lagt til via <code>$designer.Controls.Add(...)</code> fra Windows PowerShell 5.1 kaster <code>System.NullReferenceException</code> dypt inne i <code>IDispatchComObject.EnsureScanDefinedMethods</code> — både som kjedet kall (<code>$lbl.Font.Bold = $true</code>) og som topunktskall. Krasjer RETT ETTER at en synlig blank arbeidsbok åpnes og RETT FØR den lukkes igjen — ser fra brukersiden ut som «en generisk Excel-fil åpnet seg, lukket seg selv, så en kryptisk feil», lett å mistolke som feil målfil fremfor denne spesifikke linja.</dd>
+    <dt>Årsak</dt><dd>En begrensning i PowerShell 5.1s COM-interop mot nettopp dette Font/StdFont IDispatch-objektet — ikke noe som kan fikses fra scriptkoden selv.</dd>
+    <dt>Løsning</dt><dd>Sett ALDRI <code>.Font.Bold</code>/<code>.Font.Name</code>/<code>.Font.Size</code> osv. fra installer-PowerShell-en. Sett det i stedet fra VBA-KODE som kjører i Excel ved kjøretid (f.eks. i <code>UserForm_Initialize</code>) — det er en helt ordinær, trygg operasjon der; VBA selv har ikke denne interop-buggen. Ikke over-anvend denne begrensningen på VBA-runtime-kontekster den ikke gjelder for.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender-installeren (generelt PowerShell 5.1 COM-interop-funn)</p>
+</div>
+
+<div class="gotcha" id="g-userform-no-resize-border" data-cat="msforms">
+  <h4>VBA UserForms har ingen native, dra-i-kanten resize</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En forespørsel om ekte vindusresize for et UserForm kan lett undervurderes som en enkel egenskap å slå på.</dd>
+    <dt>Årsak</dt><dd>Ingen <code>BorderStyle</code>-verdi gir et UserForm en normal Windows dra-i-kanten-kant/hjørne — <code>fmBorderStyleNone</code> og <code>fmBorderStyleFixedSingle</code> er de eneste alternativene, begge fast størrelse. Ekte dra-og-slipp-resize krever Windows API-subclassing (<code>SetWindowLong</code>/<code>GetWindowLong</code> for å legge til <code>WS_THICKFRAME</code>, avlytte <code>WM_NCHITTEST</code>, <code>PtrSafe</code>-deklarasjoner for 64-bit) — en reell, men noe skjør teknikk som i verste fall kan destabilisere hele Office-prosessen hvis den ikke ryddes riktig opp.</dd>
+    <dt>Løsning</dt><dd>Tilby lavrisiko-alternativet først: auto-tilpass skjemaet til <code>Application.UsableHeight</code> ved <code>Initialize</code>, pluss native <code>Me.ScrollBars</code>/<code>Me.ScrollHeight</code> for det som ikke får plass. Dekker samme underliggende behov (se alt, på enhver skjerm) uten API-risikoen. Håkon valgte dette da han ble spurt direkte.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend</p>
+</div>
+
+<div class="gotcha" id="g-multicolor-label" data-cat="msforms">
+  <h4>MSForms Label kan ikke ha flere farger i én kontroll</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ønske om en fargekodet statuslinje («Gjenstår: 5   Sendt: 2   Feil: 1» med hvert tall i egen farge) i én enkelt Label lot seg ikke gjøre.</dd>
+    <dt>Årsak</dt><dd>MSForms <code>Label</code> støtter ikke rich text/flerfarget tekst i én kontroll.</dd>
+    <dt>Løsning</dt><dd>Del opp i flere tilstøtende <code>Label</code>-kontroller, én per fargesegment, hver med sin egen <code>.ForeColor</code> satt i VBA. Gjorde det samtidig enkelt å vise/skjule hele statistikkraden uavhengig av en egen enkelt feilmeldingslabel.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmSendMail</p>
+</div>
+
+<div class="gotcha" id="g-scrollbars-gutter-width" data-cat="msforms">
+  <h4>Me.ScrollBars reserverer reell bredde fra klientarealet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En Frame med fast bredde, som så trygg ut i designtid, overlappet plutselig det vertikale rullefeltet når skjemaet faktisk ble rullbart (innhold høyere enn synlig Height).</dd>
+    <dt>Årsak</dt><dd>Når <code>Me.ScrollBars</code> inkluderer vertikal rulling og den faktisk er aktiv, reserverer Windows en rullefelt-fane som krymper det brukbare klientarealets bredde — en fast-bredde barnekontroll som så ut til å ha trygg margin ved designtidens fulle bredde, kolliderer da visuelt med rullefeltet.</dd>
+    <dt>Løsning</dt><dd>La en raus margin (20–25 px) mellom den bredeste fast-bredde barnekontrollen og skjemaets egen <code>Width</code> — ikke bare nok for en behagelig sidemarg ved urullet visning.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett</p>
+</div>
+
+<div class="gotcha" id="g-session-accounts-delt-postboks" data-cat="outlook">
+  <h4>Outlook Session.Accounts lister aldri delte postbokser</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En falsk «konto ikke funnet»-advarsel for den delte postboksen (valgfritt navn, satt opp av brukeren i Oppsett), selv om alt var riktig konfigurert og postboksen fungerte perfekt i Outlooks egen «Fra»-dropdown.</dd>
+    <dt>Årsak</dt><dd><code>Session.Accounts</code> lister ALDRI delte postbokser eller delegat-«send som»-identiteter, uansett hvor godt tilgangen er konfigurert — bekreftet ved å sjekke Fil→Kontoinnstillinger→E-post, der bare den ekte, personlige kontoen står oppført som «konto».</dd>
+    <dt>Løsning</dt><dd>Fall tilbake til <code>olMail.SentOnBehalfOfName = adresse</code> når ingen <code>Account</code>-objekt matcher, i stedet for å gi opp. «Send som» vs. «på vegne av» ble avgjort ved en ekte test til en privat Gmail-adresse og lesing av mottatt «fra:»-felt: ingen «på vegne av»-tekst — bekreftet ekte Send As-rettighet, ikke bare delegat-tilgang. Outlooks compose-tids-InfoBar («Send med kontoen: …») er kun et teknisk relé-hint, ikke noe mottakeren ser. Etter at dette var 100 % bekreftet pålitelig i akkurat dette oppsettet, ble til og med per-mail-advarselen fjernet helt — den var en konstant falsk positiv og ville vært irriterende ved potensielt hundrevis av utsendelser.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender (avsendersagaen)</p>
+</div>
+
+<div class="gotcha" id="g-display-nullstiller-signatur" data-cat="outlook">
+  <h4>olMail.Display() nullstiller mer enn signaturen</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En enkeltsendt mail mistet både den tilsiktede brødteksten (erstattet med brukerens personlige Outlook-signatur) og en satt <code>DeferredDeliveryTime</code>; den masse-sendte varianten (som aldri kaller <code>Display()</code>) beholdt begge korrekt.</dd>
+    <dt>Årsak</dt><dd><code>.Display()</code> re-initialiserer elementet: setter inn standard ny-melding-signatur og nullstiller <code>DeferredDeliveryTime</code>, uavhengig av hvilken konto som vises i Fra-feltet.</dd>
+    <dt>Løsning</dt><dd>Lagre <code>HTMLBody</code> og <code>DeferredDeliveryTime</code> FØR <code>.Display()</code> kalles, og gjenopprett dem etterpå hvis de er endret. Samme lagre/sammenlign/gjenopprett-mønster for begge egenskapene, plassert rett ved siden av hverandre i <code>SendMailForRad</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, SendMailForRad</p>
+</div>
+
+<div class="gotcha" id="g-vedlegg-hang-com" data-cat="outlook">
+  <h4>Å vedlegge en åpen/lukket .xlsm eller .ps1 fra samme mappe hang COM i minutter</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et live COM-kall til utsending hang i flere minutter, uten synlig feil; prosess-sjekker (<code>Excel.Ready</code>, <code>Outlook.Inspectors.Count</code>) så normale ut, begge prosesser rapporterte «Responding=True».</dd>
+    <dt>Årsak</dt><dd>Den aktivt åpne, Excel-låste <code>.xlsm</code>-fila (eller installer-scriptet <code>.ps1</code>) i samme mappe som mal-fila ble automatisk plukket opp som vedlegg av vedleggs-skanneren, siden dette generiske verktøyet (til forskjell fra en tidligere, prosjektspesifikk forgjenger) ofte har mal og prosjektfiler i samme mappe. Den faktiske hengingen viste seg å skyldes en skjult, allerede-fikset <code>MsgBox</code> fra en eldre bug, som ventet på et klikk Håkon ikke kunne se komme.</dd>
+    <dt>Løsning</dt><dd><code>ErProsjektVerktoyfil()</code>-filteret ekskluderer <code>.ps1/.bas/.frm/.cls/.xlsm/.xlsx/.xlsb/.xls</code>-filer og <code>~$</code>-låsfiler fra vedleggsskanningen, i tillegg til selve mal-fila (eksakt navnematch). Generell lærdom: når et live COM-kall til <code>Application.Run</code>/lignende henger uten synlig feil og prosess-nivå-sjekker ser fine ut, mistenk en skjult modal dialog (<code>MsgBox</code> eller lignende) på brukerens skjerm som automatiseringen ikke kan se — be brukeren sjekke skjermen sin fremfor å fortsette å polle blindt.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, LeggVedVedlegg</p>
+</div>
+
+<div class="gotcha" id="g-preview-close-discard" data-cat="outlook">
+  <h4>Forhåndsvisning uten hengende utkast, og usynlige tomme linjer i .Body</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Gjentatt forhåndsvisning risikerte å etterlate hengende Outlook-utkast; brødtekst-forhåndsvisningen hadde uforklarlig ekstra tom plass under teksten.</dd>
+    <dt>Årsak</dt><dd><code>olMail.Body</code> (Outlooks egen HTML→ren-tekst-konvertering) inneholder usynlige etterslepende tomme linjer.</dd>
+    <dt>Løsning</dt><dd>Bygg forhåndsvisningen med <code>CreateItemFromTemplate</code>, og lukk elementet med <code>olMail.Close(1)</code> (<code>olDiscard</code>) etterpå slik at det aldri blir et hengende utkast. Trim etterslepende tomme linjer fra <code>.Body</code> før visning og før høydeberegning basert på den.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend (forhåndsvisning)</p>
+</div>
+
+<div class="gotcha" id="g-deferred-delivery-notes" data-cat="outlook">
+  <h4>DeferredDeliveryTime: driftsdetaljer som lett overses</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Uklarhet rundt hva som faktisk skjer med en mail satt til utsatt levering.</dd>
+    <dt>Årsak</dt><dd><code>DeferredDeliveryTime</code> legger mailen i Utboks helt til tidspunktet inntreffer — og Outlook må faktisk KJØRE på det tidspunktet for at den skal sendes. Trygt å redigere eller slette elementet i Utboks når som helst før det faktisk overføres. Ved masse-sending ble 1 sekunds pause mellom hver <code>.Send()</code> holdt gjennom 196 ekte mailer (Exchange-vennlig takt). Sendte elementer i Outlook fylles ut med litt forsinkelse etter at makroens egen «ferdig»-melding vises — normal Outlook-asynkronitet, ikke en feil i makroen.</dd>
+    <dt>Løsning</dt><dd>Kommuniser disse forutsetningene til brukeren (Outlook må kjøre; Utboks er trygg å redigere i); ikke tolk forsinket utfylling av Sendte elementer som et symptom på at sendingen feilet.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, Levering-funksjonen og masseutsendelse</p>
+</div>
+
+<div class="gotcha" id="g-outlook-meldingstyper-delt-postboks" data-cat="outlook">
+  <h4>Skille ekte svar, autosvar, NDR og videresendinger i en delt postboks</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Automatisk klassifisering av innkommende e-post i en delt postboks risikerer å blande ekte svar, automatiske svar, «ikke levert»-meldinger og videresendinger.</dd>
+    <dt>Årsak</dt><dd>Ekte svar og automatiske svar har samme Outlook-klasse (43, <code>IPM.Note</code>) — kun et «Automatic reply: »-emneprefiks skiller dem, ikke noen strukturell egenskap. NDR-meldinger («ikke levert») har en annen klasse (46, <code>REPORT.IPM.Note.NDR</code>, prefiks «Undeliverable: ») og har ofte TOMME <code>SenderEmailAddress</code>/<code>ReceivedTime</code>/<code>To</code>-felt. Videresendinger kjennetegnes ved «VS: »-prefiks.</dd>
+    <dt>Løsning</dt><dd>Sjekk emneprefiks eksplisitt for autosvar/videresending, og forvent tomme avsender-/mottakerfelt på NDR-elementer i stedet for å anta de alltid er utfylt. <code>ReceivedTime</code> kan filtreres direkte for periodeavgrensning.</dd>
+  </dl>
+  <p class="src">Kilde: Kontaktsentralen-undersøkelsen (delt postboks-mekanikk, gjenbrukbar for enhver makro som leser den samme postboksen)</p>
+</div>

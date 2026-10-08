@@ -1,0 +1,155 @@
+<div class="gotcha" id="g-versjon-bump" data-cat="installer">
+  <h4>Versjonsmarkør må økes ved hver kodeendring</h4>
+  <dl><dt>Symptom</dt><dd>Installeren rapporterer «allerede oppdatert» og hopper stille over en reell kodeendring.</dd><dt>Årsak</dt><dd><code>$KtsVersion</code> (fylt inn i VBA-konstanten <code>KTS_VERSION</code> via <code>{{VERSION}}</code>) sammenlignes mot målfilas installerte versjon; uendret versjonsnummer = ingen oppdatering, uavhengig av om koden faktisk endret seg.</dd><dt>Løsning</dt><dd>Øk versjonsnummeret ved HVER kodeendring, selv en liten en (unntak: rene tekst-/kommentarendringer kan verifiseres med <code>-Force</code> uten bump, som i Steg 5-opprydding). Håkon må selv bruke ny versjon av installeren for at oppdateringen skal skje.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-designer-font-bold-nullref" data-cat="com">
+  <h4>Designer-bygd Label: .Font.Bold kaster NullReferenceException</h4>
+  <dl><dt>Symptom</dt><dd>Installasjonen feiler med en .NET <code>NullReferenceException</code> under komponentbygging.</dd><dt>Årsak</dt><dd>Å sette <code>.Font.Bold</code> direkte fra PowerShell-COM-bygget på en Designer-bygd (<code>Designer.Controls.Add</code>) Label kaster feilen.</dd><dt>Løsning</dt><dd>Sett fonter fra VBA ved kjøretid i <code>UserForm_Initialize</code> i stedet for fra installer-skriptet. Sett også inn en pause (~300–400 ms) mellom Designer-kontrollbygging og påfølgende <code>CodeModule.AddFromString</code>.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-addfromstring-public-reset" data-cat="com">
+  <h4>To omganger AddFromString til samme modul kan nullstille Public-variabler</h4>
+  <dl><dt>Symptom</dt><dd>En verdi satt av en tidligere <code>AddFromString</code>-kjøring leses tilbake tom etter en SENERE, separat <code>AddFromString</code> mot samme modul.</dd><dt>Årsak</dt><dd><code>CodeModule.AddFromString</code> kalt to ganger mot samme modul kan tilbakestille modulens Public-variabler til standardverdier.</dd><dt>Løsning</dt><dd>Skriv en test-Sub og dens resultatleser-funksjon i ÉN OG SAMME <code>AddFromString</code>-kall, ikke i to separate kall.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-onaction-0x800a03ec" data-cat="com">
+  <h4>«Kan ikke angi OnAction-egenskapen» (0x800A03EC)</h4>
+  <dl><dt>Symptom</dt><dd>COM-feil ved tildeling av <code>Shape.OnAction</code>.</dd><dt>Årsak</dt><dd>To observerte scenarioer: (a) etter timer med gjentatt install/uninstall i samme langlevde Excel-prosess (fersk prosess løste det umiddelbart); (b) én gang rett etter import i en HELT fersk prosess — en tidsglitch der identisk retry gikk fint.</dd><dt>Løsning</dt><dd>Foretrekk en fersk Excel-prosess per testomgang fremfor å kjøre mange sykluser mot samme langlevde prosess. Ved enkeltstående feil: re-kjør installeren.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-hang-kompileringsfeil" data-cat="com">
+  <h4>Hang i automasjon rett etter kodeinstallasjon = nesten alltid ekte kompileringsfeil</h4>
+  <dl><dt>Symptom</dt><dd>Automasjonskallet henger uendelig uten noen COM-unntak, kort tid etter at VBA-kode ble installert/oppdatert.</dd><dt>Årsak</dt><dd>En ekte VBA-KOMPILERINGSFEIL (til forskjell fra en kjøretidsfeil i en ellers fungerende prosedyre) bryter alltid inn i VBE-debuggeren uansett «Break on All Errors»-innstilling, fordi <code>On Error GoTo</code> kun fanger KJØRETIDSFEIL, aldri kompileringsfeil. I usynlig automasjon (<code>Application.Visible = $false</code>) vises debugger-vinduet «Microsoft Visual Basic for Applications» (vindusklasse <code>#32770</code>) og blokkerer stille — dette ble først feilaktig tolket som en miljøinnstilling, men var en reell bug (se <a href="#g-byval-array">gotcha</a>).</dd><dt>Løsning</dt><dd>Behandl en hang rett etter kodeinstallasjon som et sterkt signal om en reell kompileringsfeil, ikke en ufiksbar miljøkvirk — let etter den faktiske bugen. Sjekk etter en foreldreløs EXCEL.EXE-prosess (vindutittel bekrefter et debug-brudd, ikke en uendelig løkke) og drep kun egen PID.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-makroer-deaktivert-automasjon" data-cat="com">
+  <h4>Arbeidsbok åpnet i ny automasjons-Excel kan ha makroer deaktivert</h4>
+  <dl><dt>Symptom</dt><dd><code>Application.Run</code> feiler med «makroen er ikke tilgjengelig / alle makroer er deaktivert», selv med <code>Application.AutomationSecurity = msoAutomationSecurityLow</code> satt før <code>Workbooks.Open</code>.</dd><dt>Årsak</dt><dd>På denne administrerte universitetsmaskinen finnes det ingen automasjons-bare måte å få en ANDRE, klarert, makro-aktivert Excel-prosess: kun DEN ene interaktivt allerede klarerte prosessen (den <code>GetActiveObject</code> kobler til) kan kjøre makroer. En arbeidsbok åpnet i en helt ny <code>New-Object -ComObject Excel.Application</code>-instans får makroer deaktivert, selv om VBA-prosjektredigering via <code>VBComponents</code> fortsatt virker.</dd><dt>Løsning</dt><dd>I installer-startet instans (<code>-NyExcelInstans</code>) VIRKER <code>Application.Run</code> derimot (den prosessen regnes som klarert av installeren selv). Bruk denne, ikke en ubetinget ny <code>ComObject</code>-instans, når kjørende makrokode trengs i test.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-userform-application-run" data-cat="testing">
+  <h4>Application.Run kan ikke kalle Sub inni et UserForms egen kodemodul</h4>
+  <dl><dt>Symptom</dt><dd>Generisk «makro ikke tilgjengelig»-feil ved forsøk på å kjøre en Sub som ligger i selve skjemaets kodemodul.</dd><dt>Årsak</dt><dd><code>Application.Run</code> kan bare kalle standardmodul-prosedyrer på denne måten, ikke prosedyrer i et UserForms egen modul. Et UserForm lagt til friskt i samme økt via <code>VBComponents.Add(3)</code> kan heller ikke pålitelig <code>Load</code>'es umiddelbart etterpå (hang). ActiveX-kontroller (<code>OLEObjects.Add</code>) er i tillegg blokkert på maskinen («Kan ikke sette inn objektet»).</dd><dt>Løsning</dt><dd>Rut testkall via en Sub i en STANDARDMODUL i stedet. For å teste privat skjemalogikk: injiser offentlige <code>Test*</code>-wrapper-Subs i skjemaets egen <code>CodeModule</code> i TESTFILA (forsvinner ved neste <code>-Force</code>-reinstall) — se testmetodeavsnittet.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-ustabile-application-run" data-cat="com">
+  <h4>Ustabile Application.Run-kall etter mye live VBA-prosjektkirurgi</h4>
+  <dl><dt>Symptom</dt><dd>Etter dusinvis av <code>AddFromString</code>/<code>DeleteLines</code>-runder mot SAMME lastede prosjekt i én økt: kryss-prosedyrekall begynner å feile ikke-deterministisk — noen ganger kaster hele <code>Application.Run</code> en <code>On Error</code>-ufangbar <code>Exception from HRESULT: 0x800A9C68</code> uten at kalt prosedyres første linje i det hele tatt kjører; andre ganger kjører den kalte prosedyren fint, men KALLEREN fortsetter stille ikke etterpå, uten noe unntak i det hele tatt.</dd><dt>Årsak</dt><dd>Reproduserte seg identisk gjennom en full <code>Workbook.Close</code>+reopen i SAMME langlevde EXCEL.EXE-prosess. Kunne ikke rendyrkes mot en helt fersk prosess som kontroll, fordi en arbeidsbok åpnet i en helt ny automasjons-<code>Excel.Application</code> har makroer deaktivert (se <a href="#g-makroer-deaktivert-automasjon">gotcha</a>) — det finnes altså ingen ren måte å isolere «degradert økt» fra «reell kodefeil» på denne maskinen. Første teori («degradert økt») ble senere i stor grad erstattet av: det var reelle kompileringsfeil som kom til syne som rå HRESULT gjennom eksternt <code>Application.Run</code> (se <a href="#g-hang-kompileringsfeil">gotcha</a>).</dd><dt>Løsning</dt><dd>Ikke jakt videre på det som en logikkbug i samme, allerede mistenkelige, prosedyre. Bygg heller en ren, ISOLERT, enkeltformåls-test fra scratch (nye dictionaries, minimale setninger). Lykkes den isolerte re-testen rent, stol på den og ikke fortsett å presse den ORIGINALE, allerede degraderte kallveien. Sett en realistisk grense for hvor mye automatisert kryss-kall-testing man gjør per økt før man faller tilbake på Håkons egen klikk-test, som er immun mot dette (går aldri via eksternt <code>Application.Run</code>).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-powershell-addtype-session" data-cat="powershell">
+  <h4>Hvert PowerShell-verktøykall er en ny økt — Add-Type overlever ikke</h4>
+  <dl><dt>Symptom</dt><dd>Typer definert med <code>Add-Type</code> i ett verktøykall er borte i neste.</dd><dt>Årsak</dt><dd>Hvert PowerShell-verktøykall kjører i en ny prosess/økt; <code>Add-Type</code>-typer lever ikke videre til neste kall.</dd><dt>Løsning</dt><dd>Lagre hjelpere som egne <code>.ps1</code>-filer i <code>%TEMP%</code> og dot-source dem i hvert kall. <code>Add-Type</code> trenger <code>-ReferencedAssemblies System.Drawing</code> for bildekode; en C#-advarsel om bitvis or på fortegnsutvidet operand blir en FEIL — bruk <code>uint</code>-casting. Ikke navngi en funksjon <code>R</code> (det er et innebygd alias for <code>Invoke-History</code>).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-remove-item-blokkert" data-cat="powershell">
+  <h4>Remove-Item blokkert nær lange scratchpad-stier</h4>
+  <dl><dt>Symptom</dt><dd><code>Remove-Item</code> feiler eller blokkeres av en sikkerhetssjekk på/nær lange scratchpad-stier.</dd><dt>Årsak</dt><dd>Sti-lengde/sikkerhetsmekanisme i miljøet stopper enkelte slettinger.</dd><dt>Løsning</dt><dd>Bruk <code>rm -f</code> via Bash i stedet, eller <code>Move-Item</code>, og del opp kommandoer i mindre steg.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-combo-style2-verdi-finnes-ikke" data-cat="msforms">
+  <h4>Style=2-ComboBox krasjer på verdi som ikke finnes i lista</h4>
+  <dl><dt>Symptom</dt><dd>Innstillinger-vinduet kunne ikke lenger åpnes etter at Håkon omdøpte en kolonne som var registrert som Respons-/Oppfølging-kolonne (eller pekte en postboksverdi mot en ikke-eksisterende mappe).</dd><dt>Årsak</dt><dd><code>UserForm_Initialize</code> satte <code>.Value</code> direkte på en <code>Style=2</code> (låst dropdown-liste) ComboBox til en lagret streng som ikke lenger fantes i lista, noe som kaster en ufanget kjøretidsfeil og krasjer hele skjemaet.</dd><dt>Løsning</dt><dd>Sett en trygg standardverdi først («(Ingen)»/tom), forsøk deretter den lagrede verdien inni <code>On Error Resume Next</code> — sjekk medlemskap før <code>.Value</code>/<code>.ListIndex</code> settes (<code>SettComboHvisFinnes</code>). En stale verdi faller da stille tilbake til standard i stedet for å krasje.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-listbox-columnwidths-locale" data-cat="msforms">
+  <h4>ListBox ColumnWidths kan lese tilbake med annen verdi (locale)</h4>
+  <dl><dt>Symptom</dt><dd>En kolonnebredde satt som streng «40 pt;60 pt» leses tilbake som f.eks. «49.95 pt».</dd><dt>Årsak</dt><dd>Locale-avhengig tallformatering (komma vs. punktum som desimaltegn) ved parsing av <code>ColumnWidths</code>-strengen.</dd><dt>Løsning</dt><dd>Parse med <code>Val(Replace(x, ",", "."))</code> i stedet for direkte tolkning. Merk også: <code>ListStyle=1</code> + <code>MultiSelect=1</code> gir avkrysningsbokser, og radhøyden i en ListBox er integrert (snapper til hele rader).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-vindu-kuttet-skalering" data-cat="msforms">
+  <h4>Fast vindushøyde kutter kontroller ved skjermskalering</h4>
+  <dl><dt>Symptom</dt><dd>Knapper og kontroller nederst i skjemaet ble kuttet av på Håkons skjermer.</dd><dt>Årsak</dt><dd>Faste <code>Height</code>-verdier fungerer ikke pålitelig fordi tittellinje/ramme varierer i størrelse med Windows-skalering.</dd><dt>Løsning</dt><dd><code>KtsTilpassVindu</code>: <code>frm.Height = frm.Height - frm.InsideHeight + bunnAvLavesteKontroll + 14</code> (tilsvarende for bredde), hopp over usynlige kontroller, kalt på slutten av hvert skjemas <code>Initialize</code>.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-listview-64bit" data-cat="msforms">
+  <h4>ListView/MSCOMCTL finnes ikke i 64-bit Office</h4>
+  <dl><dt>Symptom</dt><dd>Ønske om en fargbar, radvis liste (som en ekte ListView) kan ikke løses med standard MSForms-kontroller.</dd><dt>Årsak</dt><dd>ListView/MSCOMCTL er ikke tilgjengelig i 64-bit Office, og ActiveX-kontroller er i tillegg blokkert på maskinen (se <a href="#g-userform-application-run">gotcha</a>).</dd><dt>Løsning</dt><dd>Egenbygd liste: en ramme + N rader × 7 poolede Labels + en ScrollBar. Click/DblClick-handlere for de poolede kontrollene GENERERES i en PowerShell-løkke i installeren (f.eks. <code>Private Sub lblT03_Click(): RadKlikk 3: End Sub</code>). Kontrollnavn uten underscore. <code>WordWrap=False</code> på celle-Labels; <code>BorderStyle=1</code> med <code>BorderColor</code> = radbakgrunnsfarge gir 1 px skille mellom fargede celler.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-musehjul-msforms" data-cat="msforms">
+  <h4>Musehjul virker ikke på MSForms ScrollBar/Frame</h4>
+  <dl><dt>Symptom</dt><dd>Musehjulet flytter ikke den egenbygde listens ScrollBar, verken med ekte hjulsteg eller postet <code>WM_MOUSEWHEEL</code>.</dd><dt>Årsak</dt><dd>MSForms-kontroller er «windowless» inne i ett felles «F3 Server»-vindu under <code>ThunderDFrame</code>; verken ekte hjul-notches eller postede/sendte <code>WM_MOUSEWHEEL</code>/<code>WM_KEYDOWN</code> når frem til dem. Eneste tekniske løsning funnet er WinAPI-subclassing/hook (<code>SetWindowsHookEx</code>/<code>AddressOf</code>), som ble AVVIST pga. Excel-krasjfare hvis VBA resettes/<code>End</code> mens skjemaet er åpent (tap av ulagret arbeid).</dd><dt>Løsning</dt><dd>Kompensasjon: søkefelt (<code>txtSok</code>) + tastaturnavigasjon (pil opp/ned, PgUp/PgDn, Enter) fra søkefeltets <code>KeyDown</code>. Vanlige ListBox/ComboBox HAR hjulstøtte; det er bare den egenbygde lista som mangler den — fallback ved behov er å gå tilbake til vanlig ListBox (hjul, men ingen radfarger). Uprøvd idé: en skjult, fokusert ComboBox/ListBox som hjulmottaker.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-font-bold-delt" data-cat="msforms">
+  <h4>CommandButton.Font.Bold deles mellom knappene i skjemaet</h4>
+  <dl><dt>Symptom</dt><dd>Å sette fet skrift på én knapp for å signalisere en tilstand endrer fet skrift på ALLE knappene i skjemaet.</dd><dt>Årsak</dt><dd><code>CommandButton.Font.Bold</code> oppfører seg som delt mellom knappene på et skjema i denne miljøkonfigurasjonen.</dd><dt>Løsning</dt><dd>Bruk aldri fet skrift som tilstandssignal på knapper — bruk farge (<code>KtsStilKnapp</code>) i stedet. En deaktivert knapp med farge kan se rar ut; bytt heller til grå stil + <code>Enabled=False</code> for deaktivert tilstand.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-scrollbar-fokus-blinker" data-cat="msforms">
+  <h4>ScrollBar med tastaturfokus blinket</h4>
+  <dl><dt>Symptom</dt><dd>Dashbordets lille rullefelt BLINKER hele tiden dashbordet er aktivt.</dd><dt>Årsak</dt><dd>Ikke endelig bekreftet (skjermen er ikke synlig for Claude); beste teori: en <code>ScrollBar</code> som holder tastaturfokus. Øvrige mistanker: fokusveksling når <code>KtsGaTilRadStille</code> aktiverer Excel-vinduet, eller gjentatte Min/Max/Enabled-tilordninger i listeoppdateringen.</dd><dt>Løsning</dt><dd>Gi aldri fokus til ScrollBaren (<code>TabStop=False</code>); flytt tastaturstyring til søkefeltets <code>KeyDown</code> (<code>KeyCode = 0</code> for å svelge tasten), og kall <code>txtSok.SetFocus</code> ved åpning og radklikk.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-blandet-dpi" data-cat="msforms">
+  <h4>Blandet DPI/flere skjermer forskyver windowless kontroller</h4>
+  <dl><dt>Symptom</dt><dd>På Håkons laptop ble et skjema ødelagt: en etikett skjult, en tekstboks forskjøvet, knapper skjøvet ned ~20 %; helt fint på hans store monitor. Ikke reproduserbart hos Claude.</dd><dt>Årsak</dt><dd>Windowless kontroller (Label, CommandButton) tegnes forskjøvet ca. ×1,2 nedover/til siden i forhold til windowed kontroller (ListBox, TextBox) som blir stående i ro, på Håkons blandet-DPI/flerskjerm-oppsett. Kontroller PLASSERT MELLOM to windowed lister havner bak den nedre lista og blir usynlige. Endring av <code>Form.Width</code>/<code>Height</code> før/etter <code>Show</code> skalerer IKKE kontrollene (testet, virker ikke som løsning).</dd><dt>Løsning</dt><dd>Regler for layout: ca. 60 pt luft mellom lister, aldri plasser kontroller mellom eller bak windowed kontroller, hold nye felt i venstre halvdel, og be alltid om et skjermbilde fra laptopen for å verifisere. Gjelder trolig alle skjemaene på laptopen, men bare uavklart-vinduet er rapportert ødelagt så langt.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-modeless-show" data-cat="msforms">
+  <h4>Modal Show blokkerer Application.Run i automasjon</h4>
+  <dl><dt>Symptom</dt><dd>Et automatisert testkall henger når det viser et skjema.</dd><dt>Årsak</dt><dd>Standard <code>Show</code> (modal) blokkerer kallende kode, inkludert <code>Application.Run</code> fra en ekstern automasjonsprosess.</dd><dt>Løsning</dt><dd>Bruk <code>Show 0</code> (vbModeless) for dashbordet, som også lar det ligge åpent ved siden av arbeidsboka. <code>StartUpPosition = 0</code> + egen Top/Left-setting for plassering (f.eks. «nederst til venstre»). Navigasjon mellom skjemaer: <code>Unload Me</code> → <code>AppActivate Application.Caption</code> → <code>Show</code>, i samme prosedyre (se <a href="#g-unload-me-stille-feil">gotcha</a>).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-goto-scroll-true" data-cat="excel">
+  <h4>Application.Goto Scroll:=True tvinger raden til øvre venstre hjørne</h4>
+  <dl><dt>Symptom</dt><dd>Excel scroller alltid slik at den valgte raden havner øverst til venstre i vinduet, uansett hvor brukeren så på skjermen.</dd><dt>Årsak</dt><dd><code>Application.Goto ..., Scroll:=True</code> tvinger denne oppførselen; Håkon ville ikke ha det.</dd><dt>Løsning</dt><dd>Bruk vanlig <code>.Select</code> på cellen i stedet (mønster fra Mail-utsenders <code>GaTilFunn</code>): <code>tbl.Parent.Parent.Activate: tbl.Parent.Activate: tbl.DataBodyRange.Cells(rad,1).Select</code>. For rad-hopp UTEN å stjele fokus fra dashbordet, hopp over <code>.Activate</code> på selve Excel-vinduet og bare velg cellen (<code>KtsGaTilRadStille</code>); en skjult/filtrert rad skal gi en melding i stedet for et mislykket hopp.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-listindex-reentrans" data-cat="msforms">
+  <h4>Programmatisk ListIndex-endring kan re-trigge _Change-hendelsen</h4>
+  <dl><dt>Symptom</dt><dd>En tilbakestilling av valgt verdi (f.eks. etter «forkast endringer?») kan trigge samme håndteringskode på nytt, rekursivt.</dd><dt>Årsak</dt><dd>Å sette <code>ListIndex</code> programmatisk fyrer av kontrollens egen <code>_Change</code>-hendelse akkurat som en brukerhandling ville gjort.</dd><dt>Løsning</dt><dd>Bruk et modulnivå-flagg (f.eks. <code>laster</code>) som settes før den programmatiske endringen og sjekkes tidlig i <code>_Change</code>-handleren for å hoppe over re-entrant kjøring.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-radnummer-som-nokkel" data-cat="excel">
+  <h4>Radnummer som cache-nøkkel er farlig</h4>
+  <dl><dt>Symptom</dt><dd>Sortering/filtrering av Excel-tabellen endret STILLE hvilken skole en cachet e-post pekte på — Kontrollkolonnen så riktig ut, men koblingen var faktisk feil.</dd><dt>Årsak</dt><dd>Cachen lagret opprinnelig hvilken RAD (posisjon) en e-post var koblet til, ikke en stabil identitet. Radposisjonen er skjør og endres av vanlig Excel-bruk.</dd><dt>Løsning</dt><dd>Fra v0.10.0: en radnøkkel (unik verdi, f.eks. skole-ID) lagres i cachen; ved lasting oversettes nøkkel → nåværende radposisjon. Rader uten eller med duplisert nøkkel blir «uavklart» med forklaring i stedet for å bli feilkoblet. Migrering av gammel cache leser nøkkelen fra raden som LIGGER PÅ den lagrede posisjonen NÅ — dette er kun riktig hvis tabellen ikke er sortert om siden forrige skann (Håkon må informeres om dette ved oppgradering). Dashbordet husker valgt rad via nøkkel og oppdager omsortering ved klikk.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-forste-tabell-feil" data-cat="excel">
+  <h4>KtsAktivTabell valgte feil tabell i en arbeidsbok med flere ark</h4>
+  <dl><dt>Symptom</dt><dd>Makroen kunne i praksis operere mot feil tabell i en hovedfil med mange ark.</dd><dt>Årsak</dt><dd><code>KtsAktivTabell</code> tok opprinnelig rett og slett det FØRSTE <code>ListObject</code>-en fant i arbeidsboka (i arkrekkefølge) — ikke tabellen på arket der brukeren faktisk klikket, og ikke nødvendigvis skoletabellen. Hovedarbeidsboken har flere andre ark (Statistikk, Sheet3, «MS_kopi», Rad_backup, ColumnLoadouts) som hver kan ha egne tabeller tidligere i arkrekkefølgen.</dd><dt>Løsning</dt><dd>Fra v0.10.0: eksplisitt tabellvelger i Oppsett, lagret som <code>KTS_TABELL</code>; <code>KtsAktivTabell</code> bruker denne og faller kun tilbake til første tabell hvis ingenting er valgt. Konfigarket opprettes ALDRI bare for å slå opp tabell (funksjonen kalles ved hvert dobbeltklikk i arbeidsboka, så det ville vært en kostbar bivirkning).</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-session-strukturer-ma-bygges-pa-nytt" data-cat="vba">
+  <h4>Session-strukturer må bygges på nytt fra cachen hver gang</h4>
+  <dl><dt>Symptom</dt><dd>Utdatert eller feil innhold i dashbord/radside etter at cachen er endret et annet sted.</dd><dt>Årsak</dt><dd>Modulnivå-strukturene <code>KtsSisteMeldinger</code>, <code>KtsSisteTreff</code>, <code>KtsSisteUavklarte</code>, <code>samtaleTilRad</code> osv. er kun sesjonsdata; radposisjoner og innhold kan ha endret seg siden sist de ble bygget.</dd><dt>Løsning</dt><dd><code>KtsSikreSessionFraCache</code> bygger disse strukturene PÅ NYTT fra den lagrede cachen hver gang dashbord eller radside åpnes — aldri «bygg bare hvis Nothing/tom», siden det ville la stale data stå.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-chatgpt-parallell-utvikling" data-cat="process">
+  <h4>Parallell videreutvikling i en annen AI-sesjon ved en feil</h4>
+  <dl><dt>Symptom</dt><dd>Fila på disk (v0.6.2, 1867 linjer) var vesentlig ulik den siste versjonen Claude-sesjonen selv hadde bygget (v0.5.0), uten at Claude-sesjonen hadde gjort endringene.</dd><dt>Årsak</dt><dd>Utviklingsarbeidet fortsatte «ved en feil» i en separat ChatGPT-samtale mens Claude-sesjonen var mellom tur. Et skriftlig vurderingsnotat (tilsynelatende også ChatGPT-produsert) anbefalte å stabilisere 0.6.2 fremfor å reversere eller redesigne på nytt.</dd><dt>Løsning</dt><dd>Les den FAKTISKE koden på disk selv og bekreft/avkreft notatets tekniske påstander uavhengig, i stedet for å stole blindt på et eksternt notat. Behandle en slik hendelse som en full restrukturering (fjern nå overflødig gammel kode, ikke start fra scratch) fremfor enten ren stabilisering eller full reversering, med mindre brukeren ber spesifikt om noe annet.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>
+
+<div class="gotcha" id="g-dod-kode-og-tomme-stubber" data-cat="vba">
+  <h4>Død kode og tomme hendelsesstubber overlevde en omskriving</h4>
+  <dl><dt>Symptom</dt><dd>UI-kontroller (filterknapper, dropdown-hendelser) fantes synlig i skjemaet, men gjorde ingenting ved klikk.</dd><dt>Årsak</dt><dd>Den eksternt videreutviklede v0.6.2-koden hadde: gammel klassifiseringslogikk (<code>FinnMatchendeRad</code>, <code>KlassifiserMelding</code>) liggende som DØD kode (<code>KjørSkann</code> kalte allerede en nyere <code>FinnMatchendeRadNy</code>); <code>frmKtsOppsett.cmdLagre_Click</code> skrev ikke lenger <code>KTS_KOL_OPPFOLGING</code> selv om kontrollen fortsatt fantes i UI; og ALLE dashbordets filter-/statuskontroller var tomme <code>Private Sub X(): End Sub</code>-stubber.</dd><dt>Løsning</dt><dd>Ved overtakelse av eksternt endret kode: grep systematisk etter kall til hver funksjon/kontrollhendelse for å skille reelt brukt kode fra død kode og tomme stubber, ikke anta at alt som kompilerer også faktisk gjør noe. Fjern bekreftet død kode ved restrukturering.</dd></dl>
+  <p class="src">Kilde: Kontaktsentralen</p>
+</div>

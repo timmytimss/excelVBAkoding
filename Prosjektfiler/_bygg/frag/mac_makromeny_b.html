@@ -1,0 +1,78 @@
+  <h3 id="mac-makromeny-ny-makro">Slik legger du en ny makro til i Makromeny og EMI</h3>
+  <p>Makromeny og EMI holdes i synk <strong>manuelt</strong> (ingen felles datakilde). En ny makro må derfor registreres på tre steder. Forutsetning: makroen har eget installerscript i <code>EMI\Macros\</code> med versjonsmarkør, kvalifisert OnAction-fiks (<code>$wb.Activate()</code> + <code>"'" + $wb.Name + "'!Makronavn"</code>) og et fast, unikt VBA-komponentnavn som Makromeny kan lete etter.</p>
+  <table>
+    <thead><tr><th>#</th><th>Sted</th><th>Hva som endres</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><code>HentKjentMakroInfo</code> i <code>modMakroMeny</code> (i <code>Makromeny.ps1</code>)</td>
+        <td>Nytt <code>Case</code> med <code>Indeks</code>, <code>Komponentnavn</code> (VBA-komponenten som beviser at makroen er installert), <code>OnActionNavn</code> (Public Sub som kalles), <code>Visningsnavn</code>, <code>Beskrivelse</code> (tooltip) og <code>Farge</code> (pastell-RGB, samme farge som badgen i EMI). Sjekk også at <code>ByggMeny</code> ikke har en hardkodet øvre grense på 4 (kilden sier bare «Case 1–4»; verifiser i koden).</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><code>IconB64_&lt;Navn&gt;</code> i <code>modMakroMeny</code> (+ mapping i <code>HentMakroIkon</code>)</td>
+        <td>Ny funksjon med 40x40 BMP-ikon som base64 (<code>s = s &amp; "..."</code> i 200-tegns biter). Lages fra makroens .ico med <code>Make-Base64.ps1</code> (24/32-bit, ikke 256-farger-palett). Se <a href="#g-base64-bmp-i-vba">Base64-BMP i VBA</a>.</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td>EMI: <code>$script:IkonBakgrunnPerMakro</code> i <code>Excel Macro Installer.ps1</code>, <code>Data\macro-metadata.json</code>, <code>Resources\icon-&lt;navn&gt;.ico</code></td>
+        <td>Tildel en ikonbakgrunn-indeks (fast farge, ikke hash; 6 farger finnes i <code>$script:IkonBakgrunner</code>, 5 er brukt), legg til oppføring + «Ikon»-felt i <code>macro-metadata.json</code>, og legg .ico-filen (128x128) i <code>Resources\</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Etter endringene: øk <code>MAKROMENY_VERSION</code> i <code>Makromeny.ps1</code> slik at «Oppdater» i EMI faktisk bytter komponentene i eksisterende arbeidsbøker; kopier scriptet til <code>EMI\Macros\</code>; hvis EMI-kilden er endret, kompiler <code>.exe</code> på nytt med ps2exe (ta backup først, husk <code>-noConsole -STA</code> og nytt <code>-version</code>) og start EMI på nytt for å se nye ikoner. Test i en kastefil (se testing under).</p>
+  <div class="callout note">Idé for å slippe trippel-vedlikeholdet: gjør registreringen datadrevet, enten med en felles JSON eller ved at hver makro registrerer seg selv med en liten «register»-Sub. Ikke implementert (se Åpne punkter).</div>
+
+  <h3 id="mac-makromeny-farger">Farger og ikon per makro</h3>
+  <p>Fargene per makro er <strong>faste</strong> i EMI (ikke hash-basert): Grunnen er at to makroer en gang så helt like ut i EMI. Hash-fallback (<code>Hent-IkonBakgrunn</code>) gjelder bare ukjente makroer. Ikonfilene er Håkons egne design (PNG uten bakgrunn -> avrundet firkant i makroens farge -> .ico, 128x128, 67 646 byte hver; standard-ikonet <code>Resources\icon.ico</code> er 270 398 byte).</p>
+  <table>
+    <thead><tr><th>Makro</th><th>Farge</th><th>Flisfarge i Makromeny (RGB)</th><th>EMI ikonbakgrunn-indeks</th><th>Ikonfil</th></tr></thead>
+    <tbody>
+      <tr><td>Kolonnevelger</td><td>Lilla</td><td><code>RGB(237,233,254)</code></td><td>0</td><td><code>Resources\icon-kolonnevelger.ico</code></td></tr>
+      <tr><td>Mail-utsender</td><td>Blå</td><td><code>RGB(219,234,254)</code></td><td>1</td><td><code>Resources\icon-mailutsender.ico</code></td></tr>
+      <tr><td>Kontaktsentralen</td><td>Grønn</td><td><code>RGB(220,252,231)</code></td><td>2</td><td><code>Resources\icon-kontaktsentralen.ico</code></td></tr>
+      <tr><td>Nettskjema-henter</td><td>Gul/amber</td><td><code>RGB(254,243,199)</code></td><td>3</td><td><code>Resources\icon-nettskjemahenter.ico</code></td></tr>
+      <tr><td>Makromeny</td><td>Teal</td><td>Ingen flis (Makromeny viser ikke seg selv). RGB oppgis ikke i kilden.</td><td>4</td><td><code>Resources\icon-makromeny.ico</code></td></tr>
+    </tbody>
+  </table>
+  <p>Kolonnevelger- og Mail-utsender-ikonene var Håkons stilreferanse for de øvrige. Tile-ikonene i menyen er 40x40 embedded BMP (vises ca. 22 px i flisen); badgene i EMI er 40 px med .ico på 55 % størrelse.</p>
+
+  <h3 id="mac-makromeny-historikk">Funksjoner og versjonshistorikk</h3>
+  <p>Sikre versjoner: 2.0.0 (eldre Makromeny som Hovedarbeidsboken og Testfil fortsatt kjører til «Oppdater» i EMI), 2.2.0 og 2.2.1. 2.1.x er usikre, og kilden knytter ikke versjonsnummer til hvert av de tidlige trinnene. Rekkefølgen er:</p>
+  <table class="hist">
+    <thead><tr><th>Versjon</th><th>Hva</th></tr></thead>
+    <tbody>
+      <tr><td>Første versjon (nummer ikke oppgitt)</td><td>UserForm med liste/knapper. Deteksjon ved å skanne <code>Buttons()</code>/<code>OnAction</code> på alle ark mot en innebygd liste. Håkon: «jeg vil bare se makroene som er installert i den».</td></tr>
+      <tr><td>Redesign (før 2.2.0; 2.0.0 hører trolig til her, men det er ikke bekreftet)</td><td>«App-meny» med avrundede farge-fliser, ett klikk starter makroen, menyen lukkes, ingen Lukk-knapp, «Oppdater liste» beholdt. Æøå fikset. Unike farger + ikoner per makro synkronisert med EMI.</td></tr>
+      <tr><td>Fiks (før 2.2.0)</td><td>Menyen lukket seg ikke (lå bak), og musepekeren ble blå «laster»-markør. Løsning: <code>Unload</code> FØR makroen kjøres, og <code>Application.Cursor</code> fjernet (aldri <code>xlWait</code> rundt <code>Application.Run</code>).</td></tr>
+      <tr><td>Ark-knapp (før 2.2.0)</td><td>Fane «Makromeny» som åpner menyen i stedet for å navigere, pluss toggle «Vis som fane i arket» i menyen.</td></tr>
+      <tr><td>Ikoner (før 2.2.0)</td><td>Claudes genererte ikoner forkastet (Håkon: stygge/inkonsistente). Erstattet med Håkons egne PNG-design -> .ico (128x128 badge) -> embedded 40x40 BMP i VBA. 256x256 ga korrupte ikoner (se gotchas).</td></tr>
+      <tr><td>2.2.0</td><td>Deteksjon byttet fra knapper til VBA-komponentnavn, fordi Håkon slettet knappene for Ark-modus og menyen ble tom.</td></tr>
+      <tr><td>2.2.1</td><td>KRITISK krasjfiks (fra Nettskjema-henter-økta): <code>HaandterArkAktivering</code> lagret et Worksheet-objekt i <code>Static</code> -&gt; stale referanse når arket ble slettet -&gt; Excel krasjet ved aktivering av fanen. Nå lagres bare arknavnet (<code>Static ForrigeArkNavn As String</code>) og arket slås opp via <code>ArkFinnes</code>. Se <a href="#g-static-worksheet-krasj">Static Worksheet-referanse</a>.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="mac-makromeny-design">Designbeslutninger og hvorfor</h3>
+  <ul>
+    <li><strong>Plug-in-format lik de andre</strong> (én .ps1, innebygd VBA, versjonsmarkør, stille oppdatering, <code>-Uninstall</code> bare egne komponenter, lagrer aldri brukerens fil, ingen hardkodede stier). Hvorfor: Håkon ønsket at Makromeny installeres via EMI som alle andre.</li>
+    <li><strong>Fliser i stedet for liste.</strong> «App-meny» med avrundede fargebokser, ett trykk starter. MSForms har ikke ekte avrundede knapper (<a href="#g-msforms-avrunding">MSForms-avrunding</a>); fargede <code>CommandButton</code> med ikon (<code>.Picture</code>, <code>PicturePosition = fmPicturePositionAboveCenter</code>) er nærmeste. Farge = pastell per makro, samme som badge-fargen i EMI.</li>
+    <li><strong>Menyen lukkes ved valg</strong> (Unload før Run) og har ingen Lukk-knapp (Håkons eksplisitte ønske). «Oppdater liste» er beholdt. Hvorfor Unload først: menyen lå ellers igjen i bakgrunnen når makroen åpnet eget skjema.</li>
+    <li><strong>Deteksjon via VBA-komponentnavn</strong> (ikke knapper). Hvorfor: Håkon vil bruke Ark-modus uten knapper, og komponentnavn er det eneste som pålitelig følger installasjonen. Kostnad: krever VBA-tilgangstillit (allerede påkrevd av EMI).</li>
+    <li><strong>Indeksbasert <code>HentKjentMakroInfo</code></strong> (Case 1–4) i stedet for en tabell i regneark: ingen manuell tabell i arbeidsboken. Kostnad: nytt verktøy = nytt Case + farge + ikon i Makromeny OG i EMI sin ikon/farge-map (holdes i synk manuelt; se tabellen «Slik legger du en ny makro til»).</li>
+    <li><strong>Ark-knapp som fane som IKKE navigerer</strong> (Håkons idé). <code>Workbook_SheetActivate</code>-stub i ThisWorkbook (aktiverer forrige ark + åpner meny), markørkommentarer for trygg fjerning. Toggle lagres i et Very Hidden ark, så innstillingen følger arbeidsboken (ikke registry eller fil).</li>
+    <li><strong>Ikoner i to runder.</strong> Claudes egne genererte ble kastet (Håkon: «ikke så fine», inkonsekvent stil). Håkon tegnet egne PNG-er (uten bakgrunn) -&gt; avrundede firkanter i passende farge -&gt; .ico. Etter korrupte 256 px-ikoner ble 128 px valgt. Håkon sa siden «ikke lag noen flere»; ikonene i <code>Resources</code> er hans og endelige.</li>
+    <li><strong>Faste farger per makro</strong> i EMI (ikke hash): Kolonnevelger lilla, Mail-utsender blå, Kontaktsentralen grønn, Nettskjema-henter amber, Makromeny teal. Grunn: to makroer så helt like ut i EMI. Hash-fallback bare for ukjente.</li>
+    <li><strong>Bevisst unngått:</strong> Worksheet i <code>Static</code>; <code>Application.Cursor</code>; <code>Application.OnKey</code> og andre globale hooks.</li>
+  </ul>
+  <h4>Forkastede retninger</h4>
+  <ol>
+    <li>Knappe-basert deteksjon (skanne <code>Buttons()</code>/<code>OnAction</code>): menyen ble tom når Håkon slettet knappene for Ark-modus.</li>
+    <li>256x256 ikoner via <code>GetHicon</code>: korrupte (<a href="#g-gethicon-256-korrupt">GetHicon-fallgruven</a>).</li>
+    <li>PNG-i-ICO: leses ikke av <code>System.Drawing.Icon</code> (<a href="#g-png-i-ico">PNG-i-ICO</a>).</li>
+    <li><code>CommandButton.SpecialEffect</code>: finnes ikke, run-time error 438 (<a href="#g-msforms-specialeffect">SpecialEffect</a>).</li>
+    <li><code>Application.Cursor = xlWait</code>: hengende blå laster-markør (<a href="#g-application-cursor-xlwait">Cursor</a>).</li>
+    <li>Fast makroliste uansett installasjon: strider mot ønsket om at menyen bare viser det som er installert i akkurat den boka.</li>
+    <li>Én lang <code>Const</code>/linjefortsettelse for base64: sprenger grensen på ca. 24 linjefortsettelser (<a href="#g-line-continuations-base64">linjefortsettelser</a>).</li>
+    <li>Claudes egne genererte ikoner (<code>Generate-Icons.ps1</code>, kun historikk).</li>
+    <li>Det opprinnelige ChatGPT-utkastet til tabellstyrt meny (<code>tblMakroMeny</code>): forbigått av plug-in-arkitekturen; se «Idéarkiv» under Åpne punkter.</li>
+  </ol>

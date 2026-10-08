@@ -1,0 +1,129 @@
+<div class="gotcha" id="g-ns-responsetext-charset" data-cat="encoding">
+  <h4>WinHttpRequest.ResponseText gjetter tegnsett — mojibake i æøå uten feilmelding</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Norske bokstaver (æøå) i respondentsvar blir mojibake (typisk mønster «Ã¦»/«Ã¸»/«Ã¥» i stedet for æ/ø/å), UTEN noen feilmelding. Oppdaget først da Håkon selv sammenlignet med Nettskjemas egen «Last ned Excel»-eksport; strukturinspeksjoner tidligere så kun på faste engelske kolonnenavn (elementId, textAnswer), aldri de faktiske verdiene der bugen viste seg.</dd>
+    <dt>Årsak</dt><dd><code>.ResponseText</code> gjetter tegnsett fra <code>Content-Type</code>-headeren. Nettskjemas <code>/answers</code>-svar (<code>application/x-ndjson</code>) oppgir ikke <code>charset=utf-8</code> eksplisitt, så <code>.ResponseText</code> gjettet feil og leste UTF-8-bytes som Latin-1.</dd>
+    <dt>Løsning</dt><dd>Bruk ALDRI <code>.ResponseText</code> for svar som kan inneholde ikke-ASCII-tegn. Les i stedet <code>.ResponseBody</code> (rå byte-array) og dekod eksplisitt som UTF-8 via <code>ADODB.Stream</code> (Type=1 binær skriv, Position=0, Type=2 tekst, Charset="utf-8", <code>ReadText</code>) — se <code>DecodeUtf8ResponseBody</code> i <code>modAuthentication</code>. Verifiser KUN via mønstertelling av mojibake-mønstre (før: 42 av 744 rader; etter: 0 av 762, 46 med bekreftet korrekt æøå), ALDRI ved å lese/vise faktisk respondentinnhold (sensitiv data).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C1; v2.5.0; feedback_vba_com_test_gotchas.md pkt. 7)</p>
+</div>
+
+<div class="gotcha" id="g-ns-answers-accept" data-cat="api">
+  <h4>/answers krever Accept: application/x-ndjson</h4>
+  <dl>
+    <dt>Symptom</dt><dd>HTTP 406 «No acceptable representation» ved kall med vanlig <code>Accept: application/json</code>.</dd>
+    <dt>Årsak</dt><dd><code>GET /api/v3/form/{formId}/answers</code> svarer KUN med <code>application/x-ndjson</code>, ikke <code>application/json</code>. Bekreftet av Nettskjema-utvikler (RT-sak #7666763, 17.09.2026): alle ANDRE endepunkter fungerer med <code>application/json</code> (eller <code>*/*</code>); <code>/answers</code> er unntaket.</dd>
+    <dt>Løsning</dt><dd>Sett eksplisitt <code>Accept: application/x-ndjson</code> på kall mot <code>/answers</code>. <code>ApiGetWithRetry</code> fikk en <code>AcceptHeader</code>-parameter for dette (v2.4.1).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C2; v2.4.1; feedback_vba_com_test_gotchas.md pkt. 6)</p>
+</div>
+
+<div class="gotcha" id="g-ns-answers-langt-format" data-cat="api">
+  <h4>/answers returnerer LANGT format (én rad per enkeltsvar), ikke bredt per respondent</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Mange flere «rader» i rå-responsen enn antall respondenter; en naiv lesning av «hent alle svar for et skjema» gir feil datamodell.</dd>
+    <dt>Årsak</dt><dd>Hver linje i NDJSON-svaret er sin egen JSON-verdi med formen <code>{formId, submissionId, answerId, elementId, textAnswer, elementType, createdDate, modifiedDate, answerOptionIds[]}</code> — altså PER SVAR (én per spørsmål), ikke én rad per respondent. Verken det opprinnelige idénotatet (som antok <code>/submissions</code>, som ikke finnes i v3) eller endepunktnavnet «answers» ga noe hint om dette.</dd>
+    <dt>Løsning</dt><dd><code>modJsonFlatten</code> splitter NDJSON-svaret linje for linje og PIVOTERER til bredt format: én rad per <code>submissionId</code>, <code>elementId</code> → kolonne (<code>Spm_&lt;elementId&gt;</code>), <code>textAnswer</code> → celleverdi. Endepunktet grupperer IKKE dette selv (v3.0.0).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C2; v3.0.0; feedback_vba_com_test_gotchas.md pkt. 6)</p>
+</div>
+
+<div class="gotcha" id="g-ns-ingen-paginering" data-cat="api">
+  <h4>Ingen paginering på /answers — full historikk hentes hver gang</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Én henting kan bli tung ved tusenvis av svar; ingen mulighet til å be kun om «nye siden sist».</dd>
+    <dt>Årsak</dt><dd><code>/answers</code> har ingen paginerings-parametre; hele svarhistorikken for skjemaet kommer som én strøm ved hvert kall.</dd>
+    <dt>Løsning</dt><dd>Hele historikken hentes hver gang og UPSERT-es mot tabellen. Dette gir likevel inkrementell OPPFØRSEL ut mot brukeren fordi UPSERT bare endrer/legger til det som faktisk trengs. Ekte inkrementell HENTING («hent bare nye fra API-et») er ikke bygd.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C2)</p>
+</div>
+
+<div class="gotcha" id="g-ns-me-endepunkt" data-cat="api">
+  <h4>/api/v3/me svarer alltid 200 — ubrukelig som tilkoblingstest</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Test tilkobling» rapporterer suksess selv med ugyldig/manglende token.</dd>
+    <dt>Årsak</dt><dd><code>/api/v3/me</code> svarer ALLTID HTTP 200, med <code>isAuthenticated:false</code> i body når token mangler/er ugyldig — feilen vises altså ikke som HTTP-status.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>/api/v3/form/me</code> i stedet, som krever gyldig token og gir 401 uten. Byttet i v2.2.0.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C3; v2.2.0)</p>
+</div>
+
+<div class="gotcha" id="g-ns-submissions-finnes-ikke" data-cat="api">
+  <h4>/form/{id}/submissions finnes ikke i API v3</h4>
+  <dl>
+    <dt>Symptom</dt><dd>HTTP 405 ved kall mot <code>/form/{formId}/submissions</code>.</dd>
+    <dt>Årsak</dt><dd>Endepunktet er et v2-relikt; det opprinnelige idénotatet (11.09.2026) var basert på v2 og antok dette endepunktet. Det finnes ikke i v3.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>/form/{formId}/answers</code> i stedet (se <a href="#g-ns-answers-accept">Accept-kravet</a> og <a href="#g-ns-answers-langt-format">langt-format-fallgruven</a>). Krysjekk alltid mot ekte Swagger/spec FØR kode skrives, ikke kun mot eldre idénotater.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C4; v2.4.0)</p>
+</div>
+
+<div class="gotcha" id="g-ns-elements-401" data-cat="api">
+  <h4>/elements: intermitterende 401, best effort</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Auto-alias fra spørsmålstekst og alternativtekster for avkrysning/radio mangler av og til, uten at hovedhentingen feiler.</dd>
+    <dt>Årsak</dt><dd><code>GET /api/v3/form/{formId}/elements</code> ga først permanent 401 (antatt manglende tilgang), senere fungerende, og tidvis 401 «Bearer token malformed» — årsaken til det intermitterende er ikke fastslått i kildene.</dd>
+    <dt>Løsning</dt><dd>Alt avhengig av <code>/elements</code> bygges som BEST EFFORT: ett forsøk, korte timeouts (2000/2000/3000/5000 ms), feiler stille og faller tilbake til rå element-ID-er hvis kallet mislykkes. Gir spørsmålstekst (auto-alias, <code>SetColumnAliasIfEmpty</code> — overskriver aldri manuelt satt alias), alternativtekst og skjemaets spørsmålsrekkefølge når det fungerer.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C5; ca. v3.12–v3.14)</p>
+</div>
+
+<div class="gotcha" id="g-ns-token-ingen-retry" data-cat="api">
+  <h4>Token-henting manglet retry — ett nettverksglipp ga permanent feil</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Henting feilet permanent ved et forbigående nettverksglipp under token-forespørselen; Log-arket viste «Forsøk=0».</dd>
+    <dt>Årsak</dt><dd>Token-POST-kallet hadde opprinnelig INGEN retry/backoff-logikk, i motsetning til data-kallene.</dd>
+    <dt>Løsning</dt><dd><code>AcquireAccessToken</code> fikk samme retry/backoff-mønster som data-kall (<code>MAX_RETRIES=5</code>, eksponentiell backoff, tak 30 s) i v3.15.0.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C6; v3.15.0)</p>
+</div>
+
+<div class="gotcha" id="g-ns-winhttp-send-com-feil" data-cat="com">
+  <h4>WinHttp.Send kan kaste rå COM-feil som On Error Resume Next ikke alltid fanger konsistent</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Rå COM-feiltekst («Operasjonen ble tidsavbrutt») lekker ut i stedet for en ordentlig, håndtert feilmelding; fangst-oppførselen er ikke alltid konsistent med enkel <code>On Error Resume Next</code> rundt kallet.</dd>
+    <dt>Årsak</dt><dd><code>WinHttp.Send</code> kan kaste feil på et nivå som gjør at kallerens enkle <code>On Error Resume Next</code> ikke pålitelig fanger den.</dd>
+    <dt>Løsning</dt><dd>Fang feilen INNI selve HTTP-funksjonen (nærmere kilden) og re-raise med egen, kontrollert feiltekst oppover i kjeden, i stedet for å stole på at kallerens generelle feilhåndtering fanger den rå COM-feilen.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C7)</p>
+</div>
+
+<div class="gotcha" id="g-ns-nettverk-timeouts" data-cat="api">
+  <h4>Intermitterende TCP-timeouts mot nettskjema.no er et miljøproblem, ikke en kodefeil</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Operasjonen ble tidsavbrutt» (HTTP=0) mot <code>nettskjema.no</code>/<code>authorization.nettskjema.no</code>, periodevis (dokumentert 14.–15.09.2026: IPv6 hang ~37 s i en tidligere observasjon (v2.3.2); 14.09 ca. 15:00–15:09 feilet BÅDE IPv6 og IPv4 på TCP-nivå port 443; fungerte igjen 15.09 08:18, med IPv6 fortsatt nede men IPv4 OK).</dd>
+    <dt>Årsak</dt><dd>To UAVHENGIGE HTTP-stakker (WinHTTP fra VBA og .NET <code>Invoke-WebRequest</code>) feilet likt samtidig — dette utelukker en kodefeil i selve verktøyet. <code>WinHttpRequest</code> har ingen innstilling for å tvinge IPv4.</dd>
+    <dt>Løsning</dt><dd>Diagnostiser med <code>Test-NetConnection -ComputerName authorization.nettskjema.no -Port 443</code> mot IPv6- og IPv4-adressen HVER FOR SEG, og kjør parallelt en annen HTTP-stakk for å bekrefte at det ikke er kodespesifikt. Robusthet håndteres via retry/backoff (se <a href="#g-ns-token-ingen-retry">tokenretry</a>), ikke ved å «fikse» nettverket i koden.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C8; nettverksdiagnostikk-logg.txt)</p>
+</div>
+
+<div class="gotcha" id="g-ns-tom-200" data-cat="api">
+  <h4>HTTP 200 med 0 rader kan være en periodisk glipp, ikke «ingen data»</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Eksisterende data i tabellen forsvant «annenhver gang» henting ble kjørt.</dd>
+    <dt>Årsak</dt><dd>API-et kan periodevis svare HTTP 200 med 0 rader selv når skjemaet faktisk har svar. Tidlig kode (før v3.11.0) tolket dette som «ingen data» og overskrev eksisterende tabellinnhold.</dd>
+    <dt>Løsning</dt><dd>Et svar med 0 rader overskriver ALDRI eksisterende data; eksisterende rader beholdes uendret og en ADVARSEL logges i Log-arket (v3.11.0). Rader som mangler i et senere svar slettes for øvrig ALDRI generelt (beskytter mot forbigående ufullstendige svar; slettede Nettskjema-svar blir stående i tabellen).</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C9; v3.11.0)</p>
+</div>
+
+<div class="gotcha" id="g-ns-tilgang-per-skjema" data-cat="api">
+  <h4>API-klienten må gis eksplisitt tilgang til HVERT skjema</h4>
+  <dl>
+    <dt>Symptom</dt><dd>403/404 mot et konkret Form ID, selv om Client ID/Secret er korrekte og fungerer mot andre skjema.</dd>
+    <dt>Årsak</dt><dd>API-klienten (identitet <code>[clientId]@apiclient</code>, opprettet på <code>authorization.nettskjema.no</code>) må gis tilgang i Nettskjemas EGEN tilgangsstyring for HVERT ENKELT skjema separat — global klientgodkjenning er ikke nok.</dd>
+    <dt>Løsning</dt><dd>Ved 403/404: sjekk FØRST om klienten faktisk har fått tilgang til akkurat dette Form ID-et i Nettskjemas tilgangsstyring, før man antar feil Form ID eller kodefeil.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C10)</p>
+</div>
+
+<div class="gotcha" id="g-ns-secret-lagring-avveining" data-cat="installer">
+  <h4>Client Secret-lagring: Credential Manager (per bruker) vs. arbeidsbok (portabel, ikke kryptert)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Verktøyet fungerte hos Håkon (3.20.3) men ikke hos en kollega med samme delte .xlsm-fil.</dd>
+    <dt>Årsak</dt><dd>Windows Credential Manager er PER WINDOWS-BRUKER — en delt fil som forventer å finne secret der, feiler stille hos andre brukere/maskiner. Arbeidsbok-lagring (skjult ark, klartekst) er portabel (fungerer for alle som åpner filen) men IKKE sikker (VeryHidden er ikke kryptering). Tidligere feil hos kollega: koden leste registerfeltet først og falt tilbake til Credential Manager; hos Håkon var registerfeltet tomt men secret lå i Credential Manager (fungerte via fallback), hos kollegen fantes secret INGEN av stedene, og oppgradering kopierte ikke secret inn i boka automatisk.</dd>
+    <dt>Løsning</dt><dd>v3.20.0+: secret lagres i arbeidsbokens skjulte register (<code>NettskjemaKoblinger_Hidden!I2</code>), Credential Manager kun som ENGANGSMIGRERING-fallback (<code>OfferClientSecretMigrationIfNeeded</code>, tilbys kun fra hovedmenyen, aldri midt i en batch). Del alltid filen ETTER at secret faktisk er lagret i den, og test på mottakerens PC UTEN å legge secret i hens Credential Manager.</dd>
+  </dl>
+  <p class="src">Kilde: Nettskjema-henter (Nettskjema_del3.md C11; v3.20.0/v3.21.0; kollega-feilsøking v3.20.3)</p>
+</div>

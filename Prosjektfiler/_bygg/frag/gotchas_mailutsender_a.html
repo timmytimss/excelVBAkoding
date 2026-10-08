@@ -1,0 +1,170 @@
+<div class="gotcha" id="g-listbox-click-never-fires" data-cat="msforms">
+  <h4>MSForms.ListBox.Click fyrer aldri (åtte forsøk, én ekte rotårsak)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ctrl/Shift-basert avkrysningslogikk i <code>frmMasseSend</code>s <code>lstMailer</code> «virket ikke» — over åtte forsøk fordelt på flere sesjoner (v0.16.5–0.18.7), med stadig nye hypoteser.</dd>
+    <dt>Årsak</dt><dd><code>Click</code>-hendelsen fyrer rett og slett ALDRI på denne kontrollen — verken ved ekte fysiske museklikk (bekreftet på Håkons egen maskin), ved simulert <code>mouse_event</code>, eller ved <code>PostMessage</code>. <code>MouseDown</code> derimot fyrer ALLTID, pålitelig, i alle tester. Rotårsaken til hvorfor <code>Click</code> ikke syntetiseres ble ALDRI dypere utredet (mistenkte, uprøvde forklaringer: <code>MultiSelect=fmMultiSelectExtended</code> spesifikt, avkrysningsglyfen i kolonne 0, en generell Office-kvirk) — ikke nødvendig etter at fiksen ble funnet. Underveis ble flere BLINDGATER forsøkt og forkastet: lese <code>Shift</code> direkte i <code>Click</code> (upålitelig); <code>GetAsyncKeyState</code> kalt fra <code>Click</code> (ga null respons for både Ctrl og Shift i dette VBA/Office-miljøet, årsak aldri fastslått); en hypotese om at <code>fmMultiSelectSingle</code> (standardverdien, aldri eksplisitt satt) stille nullstiller <code>.ListIndex</code> til -1 ved Ctrl/Shift-klikk.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>lstMailer_MouseUp(Button, Shift, X, Y)</code> i stedet for <code>Click</code> — en rå hendelse, symmetrisk med den alltid-pålitelige <code>MouseDown</code>, og den gir <code>X</code>/<code>Shift</code> direkte som parametre. <code>.ListIndex</code> er allerede korrekt oppdatert når <code>MouseUp</code> fyrer. Regel for fremtiden: hvis en klikk-handler «aldri virker» på en MSForms-kontroll, sjekk FØRST om selve hendelsen faktisk fyrer (sett en modulvariabel som aller første linje og les den tilbake via COM utenfra) før logikken feilsøkes videre. Kolonnevelger bruker <code>MouseUp</code> for høyreklikk uten at dette problemet noensinne oppsto der.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend (v0.16.5–0.18.9)</p>
+</div>
+
+<div class="gotcha" id="g-reentrant-click-listindex" data-cat="msforms">
+  <h4>Å sette .ListIndex fra kode utløser Click på nytt (reentrant)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et forsøk på å gjenopprette <code>.ListIndex</code> fra kode (for å rette opp en antatt uønsket -1-tilstand) ga dobbel toggling av avkrysning, som kansellerte seg selv ut.</dd>
+    <dt>Årsak</dt><dd>Bekreftet i en isolert COM-test: å sette <code>.ListIndex</code> programmatisk på en levende <code>MSForms.ListBox</code> utløser dens EGEN <code>Click</code>-hendelse på nytt.</dd>
+    <dt>Løsning</dt><dd>Unngå å skrive til <code>.ListIndex</code>/<code>.Selected</code> fra inne i en klikk-handler i det hele tatt. Enhver fremtidig fiks som vurderer å skrive tilbake til utvalgs-tilstand fra kode må ta høyde for denne reentransen, eller unngå den helt.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend (isolert COM-test)</p>
+</div>
+
+<div class="gotcha" id="g-msgbox-in-mouse-handler" data-cat="msforms">
+  <h4>MsgBox i en mus-hendelse kan ødelegge Windows' meldingskø</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En diagnostisk <code>MsgBox</code> lagt inn i en museklikk-handler for feilsøking utløste en uendelig dialogløkke. Håkon måtte drepe Excel via Oppgavebehandling.</dd>
+    <dt>Årsak</dt><dd>En modal <code>MsgBox</code> som åpnes fra INNE i en lavnivå mus-hendelse forstyrrer selve meldingskøen som museklikk leveres gjennom.</dd>
+    <dt>Løsning</dt><dd>ALDRI bruk <code>MsgBox</code> som diagnostikk i en mus-hendelse. Bruk i stedet en <code>Public Function</code> som returnerer en tilstands-streng, lest utenfra via COM (<code>Application.Run</code>), eller skriv til en <code>Label.Caption</code>. Se testteknikk-fragmentet for det fulle COM-bro-mønsteret.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend</p>
+</div>
+
+<div class="gotcha" id="g-height-snapback" data-cat="msforms">
+  <h4>ListBox.Height satt i UserForm_Initialize hopper tilbake til designverdi</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Vinduet ble klippet på Håkons skjerm (ca. 419 pt brukbar høyde); lista dekket kontrollene under, selv om koden satte en mindre <code>lstMailer.Height</code> og en umiddelbar tilbakelesing bekreftet den nye, mindre verdien.</dd>
+    <dt>Årsak</dt><dd>Bekreftet via COM-instrumentering, sjekkpunkt for sjekkpunkt: to uavhengige ting nullstiller <code>.Height</code> stille tilbake til designverdien — (1) å endre selve skjemaets <code>Me.Height</code> ETTER at listas Height allerede er satt, og (2) å tilordne listas eget innhold på nytt (<code>.List</code>/<code>.ColumnWidths</code>/<code>.ColumnCount</code>). Selve nullstillingen skjer i VBAs interne aktiver/tegn-fase, som kjører ETTER at <code>UserForm_Initialize</code> er helt ferdig — <code>Initialize</code> er rett og slett for tidlig, uansett hvor sent i den man setter verdien. <code>IntegralHeight=False</code> ble prøvd (teori om rad-høyde-snapping) og gjorde INGEN forskjell.</dd>
+    <dt>Løsning</dt><dd>Beregn ønsket krympet høyde i <code>Initialize</code> (som en funksjon som returnerer verdien), lagre den i en modulvariabel, og sett <code>lstMailer.Height</code> i <code>UserForm_Activate</code> i stedet — det første punktet i skjemaets livssyklus hvor en manuelt satt Height faktisk har vist seg å feste seg. <code>UserForm_Activate</code> kan fyre flere ganger (f.eks. etter alt-tab); å sette samme verdi på nytt hver gang er harmløst. Bonus-funn: manglende nedre grense på beregningen ga en gang negativ Height, som kastet en feil som (fordi kallet lå under <code>On Error Resume Next</code>) stille hoppet over resten av rutinen, inkludert alle <code>.Top</code>-justeringer under.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend</p>
+</div>
+
+<div class="gotcha" id="g-unload-me-subcall" data-cat="vba">
+  <h4>Unload Me + kall til en delt Sub i SAMME skjema feiler stille</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>frmOppsett</code>s Lagre/Tilbake-knapper åpnet plutselig vanlig Excel i stedet for neste skjema, uten noen feilmelding.</dd>
+    <dt>Årsak</dt><dd>Den delte hjelpe-Suben (<code>GaTilbakeTilKaller</code>), definert i SAMME skjemas kodemodul, ble aldri entret etter <code>Unload Me</code> — bevist med nummererte MsgBox-brødsmuler. Koden i den ALLEREDE KJØRENDE prosedyren fortsetter fint etter <code>Unload Me</code> på sitt eget skjema (normal, veldokumentert VBA-oppførsel) — det som feiler er å gå INN i et nytt kall til en annen Sub som implisitt er bundet til <code>Me</code> (det nettopp lastede-ut skjemaet). En mellomløsning (vis neste skjema FØR <code>Unload Me</code>) viste riktignok neste vindu, men lot Oppsett henge igjen bak det, fordi et modalt <code>.Show</code> blokkerer til det lukkes.</dd>
+    <dt>Løsning</dt><dd>Ikke rut navigasjon gjennom en delt hjelpe-Sub i SAMME skjemas modul etter <code>Unload Me</code>. Legg navigasjonslogikken (If/Else + <code>.Show</code>) direkte INLINE i den samme hendelsesprosedyren, med <code>Unload Me</code> først. Dupliser de få linjene i hver handler heller enn å faktorisere dem inn i en Sub-av-Me — DRY-brudd er verdt det her. En hjelper i en ANNEN modul (f.eks. en standardmodul) ble aldri testet og kan mulig unngå problemet, men er ikke bekreftet.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett</p>
+</div>
+
+<div class="gotcha" id="g-dual-array-return" data-cat="vba">
+  <h4>To dynamiske array-variabler returnert via funksjonsnavnet i ulike grener</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Run-time error 9: Subscript out of range» i en <code>Function … As Variant</code>, selv når bare grenen som IKKE rører det problematiske arrayet faktisk kjøres.</dd>
+    <dt>Årsak</dt><dd>Empirisk isolert (dusinvis av bisection-tester mot en kastebar Excel COM-instans): når en funksjon har TO separate dynamisk dimensjonerte array-variabler (f.eks. <code>tom</code> for et tidlig-avslutt «fant ingenting»-tilfelle, og <code>tokens</code> for det normale tilfellet), der ENTEN variabel kan tilordnes funksjonens eget navn avhengig av hvilken gren som kjører, er det nok i seg selv til å utløse feilen — uavhengig av arrayenes faktiske innhold eller indeksering.</dd>
+    <dt>Løsning</dt><dd>Bruk ÉN eneste array-variabel gjennom hele funksjonen; <code>ReDim</code> den til <code>(1 To 0)</code> for tomme/tidlig-avslutt-tilfeller og til reell størrelse for det normale tilfellet, og tilordne funksjonsnavnet fra den ene variabelen kun én gang. Eller, enda enklere der det passer: returner en <code>Collection</code> i stedet for et array — grunnen til at <code>FinnPlassholdere</code> i Mail-utsender gjør nettopp dette.</dd>
+  </dl>
+  <p class="src">Kilde: en tidligere versjons «v3 avansert»-forsøk (blokkerte det forsøket helt; lærdommen ble arvet inn i Mail-utsender-designet)</p>
+</div>
+
+<div class="gotcha" id="g-function-comment-const" data-cat="vba">
+  <h4>End Function + kommentarblokk + ny Const kan gi kompileringsfeil — kun i store, ekte prosjekter</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Compile error: Only comments may appear after End Sub, End Function, or End Property», med en <code>Private Const</code>-linje etter en kommentarblokk pekt ut som feilstedet — reprodusert TO GANGER identisk i Håkons ekte, større, fler-verktøys arbeidsbok. ALDRI reprodusert i dusinvis av isolerte tester mot en fersk, tom kastebok. Kostet en hel dag med feilsøking av et ANNET, tilsynelatende urelatert symptom (<code>«Variable not defined»</code> i en annen modul), fordi en modul som ikke kompilerer får andre moduler til å klage nedstrøms i stedet for å pek rett på den egentlige feilen.</dd>
+    <dt>Årsak</dt><dd>Koden er gyldig VBA lest isolert (tom linje + kommentarblokk + ny deklarasjon etter <code>End Function</code> er fullt lovlig) — mistenkt, men aldri fullt bekreftet, årsak: noe ved hvordan <code>VBComponents.Import</code>/<code>AddFromString</code> sin parser håndterer nettopp denne tokensekvensen, som bare manifesterer seg i et større/mer komplekst reelt prosjekt.</dd>
+    <dt>Løsning</dt><dd>Grupper ALLE <code>Const</code>-deklarasjoner sammen på toppen av modulen, uten noen <code>Function</code>/<code>Sub</code>-grense mellom noen av dem; la ingen <code>Function</code>s <code>End Function</code> bli etterfulgt av en kommentarblokk som selv etterfølges av en ny deklarasjon. Ved en vedvarende kryss-modul «Variable not defined» til tross for en synlig korrekt deklarasjon: stol ikke på det symptomet — be brukeren kjøre <code>Debug &gt; Compile VBAProject</code> fra VBE-menyen og rapportere hvor DET faktisk stopper.</dd>
+  </dl>
+  <p class="src">Kilde: en tidligere versjons modMailUtsendelse (samme klasse feil som senere ble en generell regel for Mail-utsender)</p>
+</div>
+
+<div class="gotcha" id="g-userform-const-mid-module" data-cat="vba">
+  <h4>Modulnivå Dim/Const midt i et UserForms kodemodul gir kompileringsfeil</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Compile error: Only comments may appear after End Sub, End Function, or End Property» — utenfra, via COM, kommer bare en kryptisk HRESULT (<code>0x800A0009</code>) uten forklaring. Rammet minst tre ganger i Mail-utsender-utviklingen.</dd>
+    <dt>Årsak</dt><dd>I et UserForm (en klassemodul) MÅ ALLE modulnivå-deklarasjoner stå samlet øverst, før første <code>Sub</code>/<code>Function</code>. En vanlig standard <code>.bas</code>-modul tolererer spredte deklarasjoner mellom prosedyrer — et UserForm gjør det ikke. PowerShell-syntakssjekk (<code>[ScriptBlock]::Create</code>) ser IKKE denne typen VBA-feil i det hele tatt, siden den bare validerer PowerShell-laget rundt heredocen.</dd>
+    <dt>Løsning</dt><dd>Nye <code>Const</code>/<code>Dim</code> skal alltid inn i den eksisterende toppblokka, aldri inline nær koden som først bruker dem — en naturlig lokalitets-instinkt som er aktivt feil for akkurat denne modultypen. Diagnose når det skjer: åpne VBE (kompileringsfeil-dialogen «Microsoft Visual Basic for Applications» legger seg ofte BAK det aktive vinduet — les den via UIA/EnumWindows) eller kjør <code>Debug &gt; Compile VBAProject</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett (Levering-funksjonen)</p>
+</div>
+
+<div class="gotcha" id="g-and-or-ikke-shortcircuit" data-cat="vba">
+  <h4>VBA And/Or er IKKE short-circuit</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Type mismatch»-krasj, live, på Håkons aller FØRSTE åpning av Levering-skjemaet (v0.13.0) — ikke et sjeldent kanttilfelle, men den vanlige førstegangs-tilstanden («ingen dag valgt ennå»).</dd>
+    <dt>Årsak</dt><dd><code>If dagValgtForst &lt;&gt; "" And CLng(dagValgtForst) &lt;= antallDager Then</code> ser trygt ut (hopp over konverteringen når strengen er tom) — men VBA evaluerer BEGGE operander av <code>And</code>/<code>Or</code> ubetinget, uansett hva venstre side vurderer til. <code>CLng("")</code> kastes dermed uansett.</dd>
+    <dt>Løsning</dt><dd>Nest <code>If</code>-ene i stedet for å lenke med <code>And</code>/<code>Or</code> når en senere betingelses trygghet avhenger av at en tidligere er sann: <code>If dagValgtForst &lt;&gt; "" Then / If CLng(dagValgtForst) &lt;= antallDager Then … End If / End If</code>. VBA har ingen <code>AndAlso</code>/<code>OrElse</code>-ekvivalent. Gjelder ethvert «sjekk at det ikke er tomt/Nothing/i gyldig område før du rører det»-mønster i hele kodebasen, ikke bare dette ene kallstedet.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett (Levering, OppdaterDagListe)</p>
+</div>
+
+<div class="gotcha" id="g-pointstoscreenpixels" data-cat="vba">
+  <h4>Me.PointsToScreenPixelsX/Y finnes ikke</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Method or data member not found» — en KOMPILERINGSFEIL, ikke en kjøretidsfeil, når denne (antatt eksisterende) MSForms UserForm-metoden ble kalt.</dd>
+    <dt>Årsak</dt><dd>Metoden finnes rett og slett ikke under det navnet i dette miljøet.</dd>
+    <dt>Løsning</dt><dd>Regn punkt→piksel-forholdet ut selv, utenfra: <code>GetClientRect</code>-piksler delt på <code>Me.InsideWidth</code>/<code>InsideHeight</code> i punkter. Forholdet viste seg å være eksakt 4/3 (ved 96 DPI, 100 % skalering) i denne konteksten — mål det empirisk for det aktuelle vinduet i stedet for å anta en fast konstant.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmMasseSend (klikk-testing)</p>
+</div>
+
+<div class="gotcha" id="g-autosize-wordwrap" data-cat="msforms">
+  <h4>AutoSize=True alene stopper ikke tekstbryting</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Flerlinjede, brutte captions som overlapper andre kontroller — den type «rotete»-skjermbilde Håkon flagget flere ganger.</dd>
+    <dt>Årsak</dt><dd>MSForms <code>WordWrap</code> er <code>True</code> som standard. Kombinert med <code>AutoSize=True</code> bryter en Label teksten innenfor whatever Width den tilfeldigvis fikk (ofte en liten COM-standardverdi, siden AutoSize-labels sjelden får en eksplisitt Width) i stedet for å vokse bredere på én linje.</dd>
+    <dt>Løsning</dt><dd>Kombiner ALLTID <code>AutoSize=True</code> med et eksplisitt <code>WordWrap=False</code> når målet er «voks for å få plass til teksten på én linje».</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmOppsett</p>
+</div>
+
+<div class="gotcha" id="g-scrollbar-bolted-on" data-cat="msforms">
+  <h4>Ikke bolt en frittstående ScrollBar på en ListBox</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Gjentatt tilbakemelding over to runder: «ikke del av vinduet», «flimrer svart når man rører den».</dd>
+    <dt>Årsak</dt><dd>En frittstående <code>Forms.ScrollBar.1</code> vil ALLTID se visuelt løsrevet ut fra en ListBox, uansett hvor stramt den er plassert — den er en annen kontroll, med egen kant/ramme. Dette var feil VERKTØY, ikke en posisjoneringsbug.</dd>
+    <dt>Løsning</dt><dd><code>Forms.ListBox.1</code> viser sin egen vertikale rullefelt automatisk når antall rader overstiger synlig høyde — bruk den native varianten fremfor en bolted-on companion-kontroll når den native støtter det man trenger.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmSendMail</p>
+</div>
+
+<div class="gotcha" id="g-modeless-error-401" data-cat="msforms">
+  <h4>Modeless skjema feiler med feil 401 mens et modalt skjema er åpent</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>frmFeilsjekk.Show vbModeless</code> feiler med runtime error 401 når det kalles mens et annet, modalt skjema fortsatt er åpent.</dd>
+    <dt>Årsak</dt><dd>Et modalt skjema blokkerer visning av et nytt modeless skjema fra samme VBA-prosjekt.</dd>
+    <dt>Løsning</dt><dd><code>Unload</code> det modale skjemaet FØRST, deretter vis det modeless skjemaet. Husk hvilket skjema man skal komme tilbake til via en <code>Public</code> modulvariabel (<code>FeilsjekkReturnerTil</code>/<code>OppsettReturnerTil</code>), siden navigasjonskjeden ellers går tapt.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender, frmFeilsjekk</p>
+</div>
+
+<div class="gotcha" id="g-dir-unreliable" data-cat="vba">
+  <h4>Dir() er upålitelig mot skysynkede stier</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Egen sti-fiks-logikk (se <a href="#g-onedrive-url-sti">OneDrive-URL-fiksen</a>) så ut til å ikke virke, når problemet faktisk lå i selve verifiseringsmetoden.</dd>
+    <dt>Årsak</dt><dd><code>Dir()</code> er upålitelig mot skysynkede (OneDrive/SharePoint) stier, og <code>Dir("")</code> oppfører seg uforutsigbart — den fortsetter det FORRIGE søket i stedet for å returnere noe entydig for en tom streng.</dd>
+    <dt>Løsning</dt><dd>Sjekk alltid for tom sti FØR et <code>Dir()</code>-kall. Bruk aldri <code>Dir()</code> som fasit for om egen stifiks-logikk faktisk virket — det var nettopp denne sirkulariteten som forlenget feilsøkingen av <a href="#g-onedrive-url-sti">OneDrive-sti-buggen</a> unødvendig.</dd>
+  </dl>
+  <p class="src">Kilde: en tidligere versjon / Mail-utsender, RessursMappe</p>
+</div>
+
+<div class="gotcha" id="g-onedrive-url-sti" data-cat="vba">
+  <h4>ThisWorkbook.Path blir en https://-URL når Autolagre er på</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Finner ikke mappen»-feil som viser en <code>https://sharepoint.com/…</code>-URL i stedet for en diskert — synlig direkte i feildialogen, som var det som gjorde diagnosen rask.</dd>
+    <dt>Årsak</dt><dd>Når en arbeidsbok ligger på SharePoint/OneDrive OG Autolagre er på, returnerer <code>ThisWorkbook.Path</code>/<code>.FullName</code> en web-URL i stedet for en lokal filsti — selv om samme fil også er synkronisert lokalt. Autolagre PÅ er det som utløser dette, uavhengig av om filen faktisk er synket.</dd>
+    <dt>Løsning</dt><dd><code>LokalStiFraSky()</code> slår opp <code>HKCU\Software\SyncEngines\Providers\OneDrive\*</code> via WMI (<code>StdRegProv</code>), leser hver undernøkkels <code>UrlNamespace</code> (synkroniseringens URL-rot) og <code>MountPoint</code> (lokal mappe), velger lengste matchende <code>UrlNamespace</code>-prefiks, og bygger stien som <code>MountPoint</code> + resten av URL-en (<code>/</code>→<code>\</code>, prosent-dekodet).</dd>
+  </dl>
+  <p class="src">Kilde: en tidligere versjon (opprinnelig fiks) / Mail-utsender (arvet verbatim + to nye kanttilfeller)</p>
+  <div class="callout warn"><p><strong>To vanskelige kanttilfeller funnet i etterkant, i to ulike prosjekter av samme fiks:</strong> (1) hvis <code>UrlNamespace</code> har en etterfølgende «/» (varierer per OneDrive-synk-registrering — traff Håkons personlige «OneDrive - Universitetet i Oslo»-bibliotek, ikke et delt SharePoint-bibliotek), mister den utregnede resten sin ledende «\», og gir en sammenslått streng uten skilletegn — fiks: legg alltid til en ledende «\» på resten hvis den er ikke-tom og ikke allerede har en. (2) <code>MountPoint</code> kan ende på samme tekstsegment som resten av URL-en (f.eks. «…General» + «General» → «…GeneralGeneral») — en første fiks (v2.6.1) som sammenlignet mot <code>MountPoint</code>s SISTE \-ledd var FEIL, fordi det siste leddet der var et helt mappenavn med mellomrom/bindestrek («Delt mappe - General»), ikke bare «General». Riktig fiks (v2.6.3): sammenlign som STRENG-SUFFIKS (<code>Right(mountPoint, Len(segment))</code>), ikke som siste \-ledd. Begge feilene ble til slutt bekreftet ved å simulere de eksakte VBA <code>Mid</code>/<code>Left</code>/<code>Right</code>/<code>InStr</code>-kallene frittstående i PowerShell mot ekte observerte verdier FØR en ny gjetning ble sendt til Håkon — <code>Dir()</code> ble aldri brukt som dommer i denne prosessen (se <a href="#g-dir-unreliable">Dir()-fallgruven</a>).</p></div>
+</div>
+
+<div class="gotcha" id="g-never-reconstruct-from-memory" data-cat="process">
+  <h4>Aldri rekonstruer kode fra hukommelsen når originalen finnes på disk</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En regresjon i Håkons ekte, reelle arbeidsbok: fire <code>KOL_*</code>-konstanter ble skrevet som <code>Private</code> igjen, selv om et annet skjema refererte dem direkte og trengte dem <code>Public</code> — synlig som «Variable not defined» i en skjermbilde-feildialog.</dd>
+    <dt>Årsak</dt><dd>Etter en «lås det ned, gjenopprett originalen»-forespørsel ble en tidligere versjon av kildekoden håndskrevet fra samtale-hukommelse i stedet for å lese en fortsatt tilgjengelig kopi på disk — og traff en ELDRE, pre-picker versjon av koden fra tidligere i samme sesjon, med feil synlighet på nøyaktig disse fire konstantene.</dd>
+    <dt>Løsning</dt><dd>Når flere versjoner av samme kode har eksistert i løpet av en sesjon, stol ikke på hukommelsen for eksakt scoping/detaljer — hvis en original fil fortsatt finnes på disk (selv én som er i ferd med å bli erstattet), diff eller kopier fra DEN i stedet for å skrive den på nytt fra hukommelsen.</dd>
+  </dl>
+  <p class="src">Kilde: en tidligere versjon (v2.2.0-regresjon)</p>
+</div>
+
+<div class="gotcha" id="g-onaction-feilbinding" data-cat="excel">
+  <h4>OnAction kan feilbindes til feil arbeidsbok</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Med flere arbeidsbøker åpne i samme Excel-prosess kan en ukvalifisert <code>.OnAction = "Makronavn"</code> resolves mot en likelydende makro i en ANNEN åpen arbeidsbok enn den knappen faktisk ligger i.</dd>
+    <dt>Årsak</dt><dd>Et ukvalifisert <code>OnAction</code>-navn løses mot den AKTIVE boka i Excel-prosessen på det tidspunktet knappen trykkes, ikke nødvendigvis mot boka knappen visuelt ligger i.</dd>
+    <dt>Løsning</dt><dd>I installeren: <code>$wb.Activate()</code> FØR knappen får sin <code>OnAction</code>, og sett verdien kvalifisert: <code>"'" + $wb.Name + "'!Makronavn"</code>. Ved søk/sletting av gamle knapper (f.eks. ved <code>-Uninstall</code>): match BÅDE eksakt ukvalifisert navn OG kvalifisert form via <code>-like "*!Makronavn"</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Mail-utsender og Kolonnevelger (samme fiks lagt til i begge, uversjonert i Mail-utsenders tilfelle — se kildekopi-avsnittet)</p>
+</div>

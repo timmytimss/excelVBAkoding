@@ -1,0 +1,87 @@
+<section class="macro" id="mac-makromeny" data-nav="Makroer i drift|Makromeny" data-title="Makromeny" data-status="I drift · v2.2.1">
+  <h2>Makromeny</h2>
+  <p class="lead">Én felles startmeny (UserForm med fargede fliser) i en .xlsm som viser og starter akkurat de EMI-makroene som er installert i den arbeidsboken, slik at man slipper én knapp per makro.</p>
+  <dl class="facts">
+    <dt>Versjon</dt>
+    <dd>2.2.1 (konstanten <code>MAKROMENY_VERSION</code> i <code>modMakroMeny</code>). Sikre versjoner i historikken: 2.0.0, 2.2.0, 2.2.1 (2.1.x er usikre). Håkons ekte arbeidsbøker kjører fortsatt eldre 2.0.0 til han trykker «Oppdater» i EMI; krasjfiksen i 2.2.1 er altså ikke aktiv der ennå.</dd>
+    <dt>Kilde</dt>
+    <dd><code>EMI\Macros\Makromeny.ps1</code> (riktig kilde, ca. 953 linjer, 65 364 byte). Lokal kopi: <code>C:\Users\haaklun\Documents\Claude (lokal)\Makromeny\Makromeny.ps1</code>. En identisk kopi lå i den gamle, nå avviklede prosjektmappa (<code>Makromeny\Makromeny.ps1</code>), som forsvinner ved sletting av mappa. Hjelpescripts er kopiert til <code>_overlevering\Makromeny\hjelpescripts\</code> (se «Filer og hjelpescripts» under).</dd>
+    <dt>Format</dt>
+    <dd>Plug-in i Excel Macro Installer (EMI): én selvstendig <code>.ps1</code> med innebygd VBA, samme mønster som Kolonnevelger, Mail-utsender, Kontaktsentralen og Nettskjema-henter. Parametre: <code>[string]$Path</code> (målt .xlsm) og <code>[switch]$Uninstall</code>. <code>$ErrorActionPreference='Stop'</code>.</dd>
+    <dt>VBA-komponenter</dt>
+    <dd><code>modMakroMeny</code> (standardmodul), <code>clsMakroTile</code> (klassemodul), <code>frmMakroMeny</code> (UserForm). Dessuten skjult ark <code>MakromenyInnst_Hidden</code>, valgfritt synlig ark «Makromeny» og en markert kodeblokk i <code>ThisWorkbook</code> (se Arkitektur).</dd>
+    <dt>EMI-ikon/farge</dt>
+    <dd>Teal (ikonbakgrunn-indeks 4 i <code>$script:IkonBakgrunnPerMakro</code>), ikonfil <code>Resources\icon-makromeny.ico</code>. Full oversikt over alle makroers farger/ikoner i egen tabell under.</dd>
+    <dt>Status</dt>
+    <dd>I drift. Ekte museklikk på en flis er ennå ikke verifisert automatisk (se Testing og Åpne punkter).</dd>
+  </dl>
+
+  <h3 id="mac-makromeny-bruk">Formål og bruk</h3>
+  <p>Håkons bakgrunn: han ville ha <strong>én</strong> knapp/inngang i et ark som kjører alle installerte makroene, i stedet for én knapp per makro. Menyen skal <strong>bare</strong> vise makroene som faktisk er installert i akkurat den arbeidsboken (ikke en fast liste). Håkons formulering fra første runde: han vil «bare se makroene som er installert i den».</p>
+  <p>Bruk, steg for steg:</p>
+  <ol>
+    <li>Håkon åpner EMI (<code>Excel Macro Installer.exe</code>), velger .xlsm-filen og trykker Installer/«Oppdater» på Makromeny (i tillegg til de andre makroene han vil ha).</li>
+    <li><code>Makromeny.ps1</code> får <code>-Path &lt;xlsm&gt;</code>. Den kobler til kjørende Excel (<code>GetActiveObject</code>) eller åpner filen, importerer VBA-komponentene og plasserer (ved fersk installasjon) en knapp som kjører <code>VisMakroMeny</code>.</li>
+    <li>I Excel klikker han knappen. UserForm «Makromeny» vises som et 2-kolonners rutenett av avrundede/fargede fliser: én flis per installert makro, med ikon + navn, og beskrivelse som tooltip. Ett klikk lukker menyen umiddelbart og starter makroen. Det finnes bevisst ingen «Lukk»-knapp (Håkons ønske), men «Oppdater liste» skanner på nytt. Nederst er avkrysningsboksen «Vis som fane i arket» (Ark-knapp).</li>
+    <li>Ark-knapp (valgfri): når den er på, får arbeidsboken et ark kalt «Makromeny» (satt først). Klikker man på den fanen, blir man på arket man var på, og menyen åpnes i stedet. Da trengs ingen knapp i arkene.</li>
+    <li><code>-Uninstall</code> fjerner bare Makromenys egne komponenter.</li>
+  </ol>
+  <div class="callout warn">Menyen krever «Trust access to the VBA project object model» i Excel (Fil &gt; Alternativer &gt; Sikkerhetssenter). Uten den vises bare en vennlig melding i <code>lblStatus</code> og ingen fliser (EMI krever den samme innstillingen fra før). Se <a href="#g-vbproject-trust">VBProject-tilgang</a>.</div>
+
+  <h3 id="mac-makromeny-arkitektur">Arkitektur</h3>
+  <h4>modMakroMeny (standardmodul)</h4>
+  <p>Konstanter: <code>MAKROMENY_VERSION</code> = "2.2.1" (versjonsmarkør), <code>MAKROMENY_ARKNAVN</code> = "Makromeny", <code>MAKROMENY_INNST_ARK</code> = "MakromenyInnst_Hidden". Offentlige rutiner:</p>
+  <table>
+    <thead><tr><th>Rutine</th><th>Oppgave</th></tr></thead>
+    <tbody>
+      <tr><td><code>VisMakroMeny</code></td><td>Viser skjemaet (<code>frmMakroMeny.Show</code>). Rutinen knappen/Ark-fanen kaller.</td></tr>
+      <tr><td><code>KjorValgtMakro(Makronavn)</code></td><td>Kjører valgt makro med kvalifisert <code>Application.Run "'&lt;bok&gt;'!&lt;OnActionNavn&gt;"</code>.</td></tr>
+      <tr><td><code>GjenopprettTilstand</code></td><td>Gjenoppretter Excel-tilstand.</td></tr>
+      <tr><td><code>HentKjentMakroInfo(Indeks, Komponentnavn, OnActionNavn, Visningsnavn, Beskrivelse, Farge)</code></td><td>Indeksbasert <code>Select Case</code> 1–4: den innebygde listen over kjente makroer. Ny makro = nytt Case her.</td></tr>
+      <tr><td><code>VBAKomponentFinnes</code>, <code>HarVBAProjektTilgang</code></td><td>Deteksjon via VBComponents og sjekk av tillit til VBA-prosjektet.</td></tr>
+      <tr><td><code>HentInnstillingArk</code>, <code>ArkFinnes</code>, <code>ErArkKnappAktiv</code>, <code>SettArkKnapp</code></td><td>Innstillingsark og av/på for Ark-knapp.</td></tr>
+      <tr><td><code>HaandterArkAktivering(Sh)</code></td><td>Kalles fra <code>Workbook_SheetActivate</code> i ThisWorkbook når Ark-knapp er på.</td></tr>
+      <tr><td><code>Base64ToBytes</code>, <code>LastIkonFraBase64</code>, <code>HentMakroIkon</code></td><td>Base64-dekoding via <code>MSXML2</code>, skriver temp <code>.bmp</code> og laster med <code>LoadPicture</code>.</td></tr>
+      <tr><td><code>IconB64_*</code> (fire funksjoner)</td><td>40x40 BMP-ikoner base64-embedded som gjentatte <code>s = s &amp; "..."</code> i 200-tegns biter (se <a href="#g-line-continuations-base64">linjefortsettelser</a>).</td></tr>
+    </tbody>
+  </table>
+
+  <h4>clsMakroTile (klassemodul)</h4>
+  <p>WithEvents-handler for <code>CommandButton</code> til dynamisk opprettede fliser. <code>Btn_Click</code> kopierer <code>OnActionNavn</code> til en lokal variabel, gjør <code>Unload frmMakroMeny</code> og kaller deretter <code>KjorValgtMakro</code>. Kopien er nødvendig fordi klasseinstansen ødelegges ved Unload (<a href="#g-unload-for-run">Unload før Run</a>, <a href="#g-dynamiske-kontroller-withevents">WithEvents</a>).</p>
+
+  <h4>frmMakroMeny (UserForm)</h4>
+  <p>Bygges via VBA-designeren fra PowerShell. Kontroller: <code>lblTittel</code>, <code>frameMeny</code> (flisene legges inn dynamisk), <code>lblStatus</code>, <code>cmdOppdater</code> («Oppdater liste»), <code>chkArkKnapp</code> («Vis som fane i arket»). Skjemabredde 360; flis 150x90, gap 10, 2 kolonner. <code>UserForm_Initialize</code>: <code>chkArkKnapp.Value = ErArkKnappAktiv()</code>, deretter <code>ByggMeny</code>. <code>ByggMeny</code> itererer <code>HentKjentMakroInfo</code> og lager en flis <strong>bare hvis</strong> <code>VBAKomponentFinnes(komponentnavn)</code>. Fliser er fargede <code>CommandButton</code> med ikon (<code>.Picture</code>, <code>PicturePosition = fmPicturePositionAboveCenter</code>), fordi MSForms ikke har ekte avrundede knapper.</p>
+
+  <h4>Skjult innstillingsark, Ark-fane og ThisWorkbook-blokk</h4>
+  <ul>
+    <li><code>MakromenyInnst_Hidden</code> er <code>xlSheetVeryHidden</code>; A1 = "Ja"/"Nei" for Ark-knapp. Toggle-verdien følger dermed arbeidsboken (ikke registry eller fil). Arket <strong>beholdes</strong> ved <code>-Uninstall</code>.</li>
+    <li>Ark «Makromeny» (synlig fane) finnes bare når Ark-knapp er på. Settes inn før <code>Worksheets(1)</code>; fjernes ved <code>-Uninstall</code> og når man skrur av. Av/på legger altså til/fjerner selve arket.</li>
+    <li>Kodeblokk i <code>ThisWorkbook</code> (<code>Workbook_SheetActivate</code>) mellom markørkommentarene <code>'===MAKROMENY_ARKKNAPP_START===</code> og <code>'===MAKROMENY_ARKKNAPP_SLUTT===</code>. Blokken kaller bare <code>HaandterArkAktivering(Sh)</code>. Injiseres av <code>Add-ArkKnappTilThisWorkbook</code> og fjernes av <code>Remove-ArkKnappFraThisWorkbook</code> (fjerner nøyaktig linjene mellom og inkludert markørene, rører ikke annen ThisWorkbook-kode). Hvis ThisWorkbook allerede har en egen <code>Workbook_SheetActivate</code>, hoppes injeksjonen over med advarsel (unngår duplikat-prosedyre = kompileringsfeil; se <a href="#g-ark-knapp-sheetactivate">Ark-knapp og SheetActivate</a>).</li>
+    <li>Ved klikk på fanen «Makromeny»: aktiver forrige ark (lagret som <em>navn</em>, <code>Static ForrigeArkNavn As String</code>, slått opp via <code>ArkFinnes</code>) og kall <code>VisMakroMeny</code>. Sjekker <code>TypeName(Sh) = "Worksheet"</code>; <code>On Error Resume Next</code> i hendelsesprosedyren.</li>
+    <li>Knapp på et ark (bare fersk installasjon, ikke nødvendig i Ark-modus): <code>OnAction</code> = <code>'&lt;Arbeidsbokas navn&gt;'!VisMakroMeny</code> (kvalifisert; se <a href="#g-crossworkbook-onaction">Cross-workbook OnAction</a>).</li>
+  </ul>
+
+  <h4>Installer-logikk (PowerShell-delen)</h4>
+  <ul>
+    <li><strong>Versjonsmarkør og stille oppdatering:</strong> <code>Get-MenuVersion</code> henter <code>MAKROMENY_VERSION</code> med regex fra VBA-koden. Installert versjon leses fra <code>modMakroMeny</code> i arbeidsboken. Lik versjon: «allerede installert og oppdatert». Ulik: «Oppdaterer Makromeny: X -&gt; Y» (komponentene fjernes og importeres på nytt). Arbeidsboken lagres <strong>aldri</strong> av installeren.</li>
+    <li><strong>-Uninstall</strong> fjerner <code>modMakroMeny</code>, <code>clsMakroTile</code>, <code>frmMakroMeny</code>; knapper hvis <code>OnAction</code> er «VisMakroMeny» eller matcher «*!VisMakroMeny»; ThisWorkbook-blokken mellom markørene; ark-fanen «Makromeny». Ingenting annet (innstillingsarket blir liggende).</li>
+    <li><strong>Norske tegn:</strong> <code>Makromeny.ps1</code> er skrevet uten BOM og med null rå æøå; token <code>{AA}</code>/<code>{OE}</code>/<code>{AE}</code> i VBA-tekst byttes via <code>[char]0x00E5/0x00F8/0x00E6</code> og <code>-replace</code> før <code>AddFromString</code> (<a href="#g-utf8-bom-aeoeaa">UTF-8 uten BOM</a>).</li>
+    <li>VBA-koden ligger i enkeltfnutt-here-strings (<code>@'...'@</code>) (<a href="#g-ps-herestring-vba">here-string-fallgruven</a>).</li>
+  </ul>
+  <div class="callout note">Stale header-kommentar: linje 15–18 i <code>Makromeny.ps1</code> beskriver fortsatt knappe-deteksjon via <code>Buttons()</code>/<code>OnAction</code>. Det er utdatert siden v2.2.0 og ufarlig; rettes ved neste versjon (<a href="#g-stale-header-kommentar">notert som fallgruve</a>).</div>
+
+  <h4>Deteksjon av andre verktøy (endret i v2.2.0)</h4>
+  <p>Menyen sjekker om <em>VBA-komponentnavn</em> finnes i <code>ThisWorkbook.VBProject.VBComponents</code>:</p>
+  <table>
+    <thead><tr><th>Komponent</th><th>Makro</th><th>OnAction</th><th>Flisfarge</th></tr></thead>
+    <tbody>
+      <tr><td><code>modColumnPicker</code></td><td>Kolonnevelger</td><td><code>ShowColumnPicker</code></td><td>lilla <code>RGB(237,233,254)</code></td></tr>
+      <tr><td><code>modGenerisk</code></td><td>Mail-utsender</td><td><code>MailUtsendelse</code></td><td>blå <code>RGB(219,234,254)</code></td></tr>
+      <tr><td><code>modKontaktsentralen</code></td><td>Kontaktsentralen</td><td><code>VisKontaktsentralen</code></td><td>grønn <code>RGB(220,252,231)</code></td></tr>
+      <tr><td><code>modNettskjema</code></td><td>Nettskjema-henter</td><td><code>AapneNettskjemaHenter</code></td><td>gul/amber <code>RGB(254,243,199)</code></td></tr>
+    </tbody>
+  </table>
+  <p>Makromeny kjenner de andre makroene <strong>bare</strong> via komponentnavn + OnAction-navn og kaller dem med <code>Application.Run "'&lt;bok&gt;'!&lt;OnActionNavn&gt;"</code>. De andre vet ingenting om Makromeny, bortsett fra at alle fem installerscript (de fire pluss Makromeny) har samme OnAction-fiks: <code>$wb.Activate()</code> før knapp-plassering og kvalifisert OnAction; uninstall matcher både «Navn» og «*!Navn».</p>
+
+  <h4>EMI-siden</h4>
+  <p><code>Excel Macro Installer\Installer\Excel Macro Installer.ps1</code>: <code>$LauncherVersion</code> 2.4.7.0, kompilert med ps2exe 2.4.7.0 (<code>Invoke-ps2exe ... -iconFile Resources\icon.ico -noConsole -STA -version "2.4.7.0"</code>; backup <code>.exe.bak-v2.4.6.0</code>, 363 008 byte). Inneholder <code>$script:IkonBakgrunner</code> (6 farger) og <code>$script:IkonBakgrunnPerMakro</code> (Kolonnevelger=0 lilla, Mail-utsender=1 blå, Kontaktsentralen=2 grønn, Nettskjema-henter=3 amber, Makromeny=4 teal) samt <code>Hent-IkonBakgrunn</code> (hash-fallback for ukjente makroer). <code>Ny-IkonKvadrat</code> tegner en avrundet pastell-badge (40 px) med .ico på 55 % størrelse. <code>Data\macro-metadata.json</code> (1 480 byte) har en Makromeny-oppføring og «Ikon»-felt for Kontaktsentralen, Nettskjema-henter og Makromeny. EMI leser ikonene fra disk ved kjøring (<a href="#g-emi-ikoner-runtime-ps2exe">EMI-ikoner og omstart</a>).</p>

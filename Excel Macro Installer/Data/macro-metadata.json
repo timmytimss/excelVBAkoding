@@ -1,0 +1,26 @@
+{
+  "Kolonnevelger": {
+    "Beskrivelse": "Vis/skjul kolonner i en tabell live, pluss inntil 8 lagrede, fargede \"loadout\"-forhåndsvalg du kan bytte mellom med ett klikk.",
+    "Ikon": "icon-kolonnevelger.ico"
+  },
+  "Mail-utsender": {
+    "Beskrivelse": "Generalisert mail-merge: hvilken som helst Excel-tabell + Outlook-mal, med brukerkonfigurerte plassholder-koblinger, avsendervalg og utsatt levering.",
+    "Ikon": "icon-mailutsender.ico"
+  },
+  "Kontaktsentralen": {
+    "Beskrivelse": "Viser per rad i en tabell hvilke Outlook-kategorier e-postene i en delt postboks har: fargelagt liste med søk, status i en Kontrollkolonne, og radside der kategoriene kan endres direkte. Kobler e-post til rader via e-postadresse eller ID og tåler at tabellen sorteres.",
+    "Ikon": "icon-kontaktsentralen.ico"
+  },
+  "Nettskjema-henter": {
+    "Beskrivelse": "Henter svar fra ett eller flere Nettskjema (UiO) via API v3/OAuth inn i egne ark/tabeller per skjema, med generelle innstillinger for API-klienten og en \"Oppdater alle\"-knapp for full kontroll på når data hentes på nytt.",
+    "Ikon": "icon-nettskjemahenter.ico"
+  },
+  "Makromeny": {
+    "Beskrivelse": "Legger til en app-meny (fargede fliser med ikon) i arket som viser alle andre TIMSS-makroer installert i akkurat den arbeidsboken. Ett klikk kjører makroen og lukker menyen. Valgfritt: vis menyen som en egen faneark-knapp i stedet for/i tillegg til den vanlige knappen.",
+    "Ikon": "icon-makromeny.ico"
+  },
+  "Statistikkern": {
+    "Beskrivelse": "Fører statistikk over unike verdier i valgte kolonner i en eller flere tabeller, vist som fargede fliser (farge hentet fra cellens faktiske fyllfarge). Valgfri underkolonne bryter tallene ned videre innad i hver hovedverdi.",
+    "Ikon": "icon-statistikkern.ico"
+  }
+}

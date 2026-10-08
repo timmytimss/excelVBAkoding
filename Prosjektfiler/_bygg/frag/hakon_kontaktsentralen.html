@@ -1,0 +1,15 @@
+<ul>
+  <li>Product owner/tester, ikke utvikler — beskriv observerbar oppførsel og resultater, ikke kodedetaljer, med mindre han spør. Reagerer presist på terminologi og korrigerer den direkte.</li>
+  <li>Vil ha ærlige tilbakemeldinger uten pynt: si tydelig hva som er testet og hva som ikke er det, og hva som krever hans egen test.</li>
+  <li>Foretrekker norsk bokmål i all kommunikasjon om dette prosjektet.</li>
+  <li>Godkjenner gjerne Claudes anbefalinger samlet («jeg liker alle dine anbefalinger, kjør på»), men vil ha store endringer rullet ut i etapper/trinn slik at han kan teste mellom hvert trinn.</li>
+  <li>Ved redesign/større usikkerhet: «still spørsmål, ikke kod før jeg sier klar». Vil ha spørsmål stilt lettfattelig og oversiktlig, gjerne med en konkret anbefaling vedlagt.</li>
+  <li>Ved lite «usage» tilgjengelig sier han «gjør kodingen uten for mye testing» — men kompileringssjekk er likevel obligatorisk uansett.</li>
+  <li>Absolutt personvernkrav: Claude skal ALDRI lese personinfo fra hans ekte Excel-filer eller Outlook-postboks, uansett formål, og uansett om det virker som «bare struktur». Ingen delegering til subagent heller. Testfiler kun i Claudes egen scratchpad, aldri andre steder i hans OneDrive.</li>
+  <li>Vil vite noe om en ekte fil/postboks: spør ham direkte i stedet for å undersøke selv.</li>
+  <li>UI-preferanser: fargekodede knapper (grønn/blågrå/oransje/blå etter funksjon); vinduer som ikke kuttes uansett skjerm (bruker både laptop og stor monitor); modeless dashbord som hopper i tabellen uten å tvinge scrolling eller stjele fokus; knapper fremfor fritekstfelt der det er mulig (f.eks. kategorivalg); søkefelt plassert logisk i forhold til listene det filtrerer; dobbeltklikk som snarvei der det gir mening (åpne e-post, åpne detaljside); ingen «Lukk»/«Gå til celle»-knapper (bruker markering/hopp og «Hovedmeny» i stedet); ingen automatisk skanning — han vil styre selv når noe skjer.</li>
+  <li>Skjermbilder han sender av egen skjerm kan inneholde ekte data — ikke gjengi innholdet i dem, og be ham dekke til navn/e-poster.</li>
+  <li>Kjører selv installasjon via «Excel Macro Installer.exe» og Makromeny mot sin hovedfil. Sletter gjerne arkknapper og bruker Makromeny i stedet — ikke gjenskap en knapp automatisk ved oppdatering. Må selv bruke en ny versjon av installeren for at en oppdatering skal slå gjennom («Du må bumpe ny versjon»).</li>
+  <li>Flere parallelle Claude-sesjoner for ulike makroer koordineres av en egen sentral koordineringssesjon.</li>
+  <li>Klikk-tester selv alt som berører ekte Outlook/ekte fil, og finner jevnlig reelle feil som automatisert testing ikke fanger — hans egen interaktive testing er en reell og verdifull del av kvalitetssikringen, ikke bare en formalitet.</li>
+</ul>

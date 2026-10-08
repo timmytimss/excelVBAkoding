@@ -1,0 +1,66 @@
+
+  <h3 id="mac-nettskjema-historikk">Funksjoner og versjonshistorikk</h3>
+  <p>«ca.» = usikkert versjonsnummer. Forkastede forsøk er tatt med fordi de viser hvorfor dagens arkitektur ser ut som den gjør. Tabellen er kronologisk; nåværende versjon er 3.22.1.</p>
+
+  <div class="callout warn"><strong>v3.10.0 (Unlist + umiddelbar gjenoppbygging) var en FEIL retning.</strong> Den ble trodd løst fordi testen brukte formler i samme arbeidsbok og samme syklus. Den ble senere erstattet av UPSERT i v3.20.0+ (rotårsak: Unlist fryser strukturerte kryss-ARK-referanser til statiske områder). Ikke gjeninnfør Unlist/Resize/rebuild. Se designbeslutning 1.</div>
+
+  <table class="hist">
+    <thead><tr><th>Versjon</th><th>Hva</th></tr></thead>
+    <tbody>
+      <tr><td>v1.0.0</td><td>Fast Dashboard/Settings/Data-oppsett med ett Form ID (etter det opprinnelige idénotatet). <strong>FORKASTET:</strong> Håkon trengte multi-skjema fra dag én, ett ark per skjema.</td></tr>
+      <tr><td>v2.0.0</td><td>Multi-tilkobling (redesign 14.09.2026): skjult register-ark <code>NettskjemaKoblinger_Hidden</code>, én knapp, hovedmeny med liste, Client Secret KUN i Windows Credential Manager, token cachet per ClientId. Da 6 VBA-komponenter.</td></tr>
+      <tr><td>v2.2.0</td><td>Felles Innstillinger (Client ID/Secret én gang; <code>GlobalClientId</code> i I1), «Oppdater alle» med samlet oppsummering. <code>RefreshConnectionRow</code> ble Function (True/False + <code>LastErrorMessage</code>). «Test tilkobling» byttet fra <code>/me</code> til <code>/form/me</code>. Bug funnet og fikset: Err-nullstilling i feilhåndtering (<a href="#g-ns-err-nullstilt">fallgruve</a>). Ekte nettverkstest: token-endepunktet svarer 401 <code>invalid_client</code> på falske credentials.</td></tr>
+      <tr><td>v2.2.1</td><td>Log-datoer viste <code>#####</code> (kolonne for smal): <code>Columns.AutoFit</code> ved hver loggrad. (Håkon rapporterte først «alle får overflow»; dette var visningen, ikke den senere ekte Overflow-feilen.)</td></tr>
+      <tr><td>v2.3.0</td><td>«Fjern tilkobling» (sletter ark + registerrad), Log-arket skjules ubetinget i <code>GetLogSheet</code>, WinHTTP-timeouts kuttet (10/10/30/120 → 5/5/15/60 for å redusere verste-fall-ventetid; se notat i Arkitektur).</td></tr>
+      <tr><td>v2.3.1</td><td>Ekte Overflow (Runtime error 6) ved ekte token: <code>TimeSerial(0,0,expires_in-60)</code> tåler ikke &gt; 32767 sek. Ny: <code>Now + CDbl(sek)/86400#</code> (<a href="#g-ns-timeserial">fallgruve</a>). Falske-credentials-tester hadde aldri nådd denne koden.</td></tr>
+      <tr><td>v2.3.2</td><td>«Tidsavbrutt» var et forbigående IPv6/nettverksproblem, ikke kodefeil (<a href="#g-ns-nettverk-timeouts">fallgruve</a>).</td></tr>
+      <tr><td>v2.4.0</td><td><code>/form/{id}/submissions</code> finnes ikke i v3 (HTTP 405; v2-relikt fra idénotatet) → <code>/answers</code>. Rå responstekst (400 tegn) føyd til feilmelding ved uventet JSON-struktur.</td></tr>
+      <tr><td>v2.4.1</td><td><code>/answers</code> krever <code>Accept: application/x-ndjson</code> (json gir 406); <code>ApiGetWithRetry</code> fikk <code>AcceptHeader</code>-parameter; parsing per linje. Første ekte henting: 732 svar (9 kolonner) mot testskjema.</td></tr>
+      <tr><td>v2.5.0</td><td>UTF-8-dekoding av <code>ResponseBody</code> via ADODB.Stream (<code>DecodeUtf8ResponseBody</code>); mojibake i æøå fanget først da Håkon sammenlignet med Nettskjemas egen Excel-eksport (før: 42 av 744 rader med mojibake-mønster; etter: 0 av 762, 46 med bekreftet korrekt æøå; kun mønstertelling). Samme runde: installeren fikk <code>CountOfLines &gt; 0</code>-sjekk etter at en komponent ble liggende tom etter en Excel-krasj (<a href="#g-ns-tom-komponent">fallgruve</a>).</td></tr>
+      <tr><td>v3.0.0</td><td>PIVOT til bredt format: én rad per submissionId, kolonner <code>Spm_&lt;elementId&gt;</code>. Håkon bekreftet selv at det fungerte.</td></tr>
+      <tr><td>v3.1.0</td><td>Alias + skjul-/vis-innstillinger via skjult ark <code>NettskjemaKolonner_Hidden</code> som ble gjort SYNLIG for redigering. <strong>FORKASTET av Håkon</strong> (han ville ha en dialog, ikke et ark som dukker opp). Ble bygd fordi <code>/elements</code> og <code>/csv-report</code> da ga 401 og ekte spørsmålstekst ikke var tilgjengelig.</td></tr>
+      <tr><td>v3.2.0</td><td><code>frmKolonneInnstillinger</code> som dynamisk bygd dialog (samme mønster som Kolonnevelger); arket er ren lagring. «Lagre og bruk» endrer tabellen umiddelbart.</td></tr>
+      <tr><td>v3.3.0</td><td>Eksempelsvar per kolonne i dialogen («F.eks.: …», første ikke-tomme svar) for å hjelpe Håkon å gjette riktig alias (<code>GetExampleAnswer</code>).</td></tr>
+      <tr><td>v3.4.0</td><td>Metadata-kolonner (<code>submissionId</code>/<code>createdDate</code>/<code>modifiedDate</code>) i dialogen (<code>EnsureColumnRegistered</code> med <code>DefaultVisible</code>-parameter; skjult som standard den gangen). Hele verktøyet fikk ekte æøå (≈140 ord rettet ordbokbasert), som krever UTF-8 BOM på .ps1 (<a href="#g-ns-ps-bom">fallgruve</a>).</td></tr>
+      <tr><td>ca. v3.5–v3.10</td><td>Stabil (registrert/append-only) kolonnerekkefølge og JAKTEN på #REF!: hver henting gjorde <code>ws.Cells.Clear</code> + ny tabell og ga Håkons formler #REF!. Forsøk, ALLE forkastet:
+        <ul>
+          <li><strong>ca. v3.6.0</strong>: én kombinert <code>ListObject.Resize</code> (rader + kolonner) → «Subscript out of range» (<a href="#g-ns-resize-detabler">fallgruve</a>).</li>
+          <li><strong>ca. v3.7.0</strong>: <code>ListRows/ListColumns Add/Delete</code>-løkker → tabellen ble STILLE et vanlig område (ingen feil), metadata-kolonner «forsvant».</li>
+          <li><strong>ca. v3.9.0</strong>: todelt Resize (rader, så kolonner) → samme de-tabling.</li>
+          <li><strong>ca. v3.10.0</strong>: <code>Unlist</code> + umiddelbar gjenoppbygging → trodd løst (formeltest i samme arbeidsbok), men FEIL retning (se advarsel over).</li>
+        </ul></td></tr>
+      <tr><td>v3.11.0</td><td>Tom API-respons (HTTP 200, 0 rader) overskrev ekte data («annenhver gang»-symptomet): eksisterende data beholdes + ADVARSEL i Log (<a href="#g-ns-tom-200">fallgruve</a>).</td></tr>
+      <tr><td>ca. v3.12–v3.14</td><td><code>/elements</code> som best effort: auto-alias fra spørsmålstekst (<code>SetColumnAliasIfEmpty</code> overskriver aldri manuelt alias), ekte alternativtekst for avkrysning, <code>PreRegisterFormColumns</code> (alle ekte spørsmål får kolonne fra første henting, også ubesvarte/betingede).</td></tr>
+      <tr><td>v3.15.0</td><td><code>AcquireAccessToken</code> fikk samme retry/backoff som data-kall (før: ingen retry; ett nettverksglipp ga permanent feil, Log viste Forsøk=0).</td></tr>
+      <tr><td>ca. v3.16–v3.18</td><td>«Fjern tilkobling» rydder også kolonneinnstillinger; <code>submissionId</code>/<code>createdDate</code>/<code>modifiedDate</code> synlige som standard (tidligere skjult).</td></tr>
+      <tr><td>v3.19.0</td><td>«Kapasitetsbuffer»: tabell med 1,5x radkapasitet, skriv inn uten å endre dimensjon. <strong>FORKASTET:</strong> ga tomme fyllrader inne i tabellen som Håkons Power Query-sammenslåing plukket opp som en tom rad (<a href="#g-ns-kapasitetsrader">fallgruve</a>).</td></tr>
+      <tr><td>v3.20.0</td><td>(17.09.2026; gjort i en annen økt, beskrevet i Håkons notat 3.20.3) <strong>UPSERT på submissionId</strong>: eksisterende oppdateres på plass, nye legges til som ListRows, ingen Unlist/rebuild. Client Secret flyttet inn i arbeidsbokens skjulte register (portabilitet), Credential Manager som fallback (kildene er uenige om nøyaktig når secret-flyttingen kom: notatet plasserer det i 3.20.2).</td></tr>
+      <tr><td>v3.20.1</td><td>Robust opprettelse av nye ListRows med verifisering (en ny NS-DS-rad havnet UTENFOR <code>NS_DS_tbl</code> og var usynlig for Power Query).</td></tr>
+      <tr><td>v3.20.2</td><td>Tabell-helsesjekk (<code>VerifyAndRepairTable</code>) + arbeid med portabel Client Secret + forsøk på å normalisere tabellstil/striping; dette bidro til/avdekket det kosmetiske blå-rad-problemet (reassign av TableStyle gjorde det verre).</td></tr>
+      <tr><td>v3.20.3</td><td>Formateringsdelen av helsesjekken gjort mer konservativ (TableStyle reassignes ikke; <code>ShowTableStyleRowStripes</code> kan slås på). UPSERT og secret-løsning uendret. Kjent kosmetisk feil består (nye rader ensfarget blå). Oppdaget etterpå: fungerte ikke hos kollega fordi secret ikke var migrert inn i boka.</td></tr>
+      <tr><td>v3.21.0</td><td>(18.09) Hel rad i ett Range-kall; ingen «OK»-logging per henting; engangsmigrering av secret fra Credential Manager til arbeidsbok (kun fra hovedmenyen, aldri midt i batch); ryddet kommentarer. UPSERT testet i isolert firesyklustest (<a href="#t-upsert-firesyklus">teknikk</a>).</td></tr>
+      <tr><td>v3.22.0</td><td>(21.09) Nytt grensesnitt (avkrysningsliste, fargede knapper, Innstillinger-meny med «Nettskjema API» + «Kolonner per skjema»). <code>SaveGlobalApiSettings</code> (synker Client ID til ALLE registerrader). <code>RefreshAllConnections</code> erstattet av <code>RefreshConnectionRows</code>.</td></tr>
+      <tr><td>v3.22.1</td><td>Fjernet raden med antall valgt/hjelpetekst/«Velg alle»/«Fjern alle» fra hovedmenyen; listen gjort høyere. NÅVÆRENDE (I drift).</td></tr>
+      <tr><td>Parallelt (Makromeny v2.2.1)</td><td>Makromeny krasjet («Automation error: Exception occurred») fordi den holdt en Static Worksheet-referanse som ble hengende etter at «Fjern tilkobling» slettet arket; fikset i Makromeny v2.2.1 ved å lagre arknavn (<a href="#g-ns-static-worksheet">fallgruve</a>).</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Opprinnelig idénotat (11.09.2026): hva som stemmer og hva som er foreldet</h4>
+  <p>Idénotatet «Nettskjema API v3 – Excel/VBA integrasjon» (18 630 B) var utgangspunktet for v1.0.0 og er delvis foreldet.</p>
+  <p><strong>Stemmer fortsatt:</strong></p>
+  <ul>
+    <li>Token-URL <code>https://authorization.nettskjema.no/oauth2/token</code> (korrigerte den opprinnelige spesifikasjonen som oppga <code>https://nettskjema.no</code>); API-basis <code>https://nettskjema.no/api/v3</code>; Basic Auth med <code>clientId:clientSecret</code>, body <code>grant_type=client_credentials</code>.</li>
+    <li>Token caches i minnet, 60 s sikkerhetsmargin, fornyes ved 401 (én gang, ingen uendelig løkke). 429: Retry-After, ellers eksponentiell backoff 2/4/8/16 s, tak 30 s, MAX_RETRIES 5. 5xx: retry med backoff. 400/403/404: ingen blind retry, vis detaljert feilmelding (feil form-ID, manglende tilgang).</li>
+    <li>WinHTTP (<code>WinHttp.WinHttpRequest.5.1</code>) med eksplisitte timeouts; MSXML for Base64; VBA-JSON (github.com/VBA-tools/VBA-JSON) som parser; ikke hardkode felt (les dynamisk); 2D-array-skriving i stedet for celle-for-celle; ListObject; Log-ark med tidspunkt/operasjon/form/HTTP-status/forsøk/resultat/feilmelding/antall rader/varighet; testplan med 12 punkter (gyldig/feil secret, ugyldig formId, manglende tilgang → 403, 401 → nytt token + ett retry, 429, 500, tomt resultat, checkbox, null → tom celle, mange svar).</li>
+    <li>UPSERT på submission-id som mest robuste modus (ble senere bygd i v3.20.0). Client-identiteten <code>[clientId]@apiclient</code> er til tilgangsstyring, ikke til Basic Auth. Personvern: respondentdata er sensitiv; vurder om identifikatorer må importeres.</li>
+    <li>Referanser notatet nevnte: UiO survey-api-schemas (github.com/unioslo/survey-api-schemas, Submission.json versjon 2024-09, version_minor 2; metadata <code>created</code>, <code>answer_time</code>, <code>submission_id</code>) og nettskjema-mcp (github.com/orjahren/nettskjema-mcp). Submission-schemaet er ikke det <code>/answers</code> returnerer; <code>/answers</code>-formatet ble avdekket empirisk.</li>
+  </ul>
+  <p><strong>Foreldet eller feil:</strong></p>
+  <ul>
+    <li><code>GET /api/v3/form/{formId}/submissions</code> som primært endepunkt (finnes ikke i v3; brukes <code>/answers</code> med x-ndjson). Antagelsen om <code>Accept: application/json</code> og «bredt» JSON-format per submission (<code>answers</code>/<code>metadata</code>-objekter, checkbox som boolske underfelter) stemmer ikke for <code>/answers</code>, som er langt NDJSON.</li>
+    <li>«Test connection» via <code>/api/v3/me</code> (bruk <code>/form/me</code>).</li>
+    <li>Anbefalt struktur Dashboard/Settings/Data/Log med ett Form ID og Client ID i Settings-ark (erstattet av multi-tilkobling, ett ark per skjema, skjult register).</li>
+    <li>«Aldri lagre client secret i arbeidsboken» / Credential Manager som anbefalt lagring: reversert i v3.20.0 (secret i skjult ark, Credential Manager kun fallback).</li>
+    <li>Eksempelkode med <code>TimeSerial</code> for utløp (gir Overflow) og <code>.ResponseText</code> (mojibake). «CSV bør vurderes seriøst» ble ikke fulgt (csv-report er octet-stream, ikke brukt). Inkrementell import («hent bare nye») ble ikke bygd; full henting + UPSERT brukes. Foreslått User-Agent «Excel-Nettskjema-VBA/1.0»: kildene sier ikke om den er implementert.</li>
+    <li>Idénotatets timeoutverdier (10000/10000/30000/120000) tilsvarer i dag data-GET-verdiene.</li>
+  </ul>

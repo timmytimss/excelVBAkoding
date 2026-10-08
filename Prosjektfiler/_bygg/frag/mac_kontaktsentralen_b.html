@@ -1,0 +1,58 @@
+
+  <h4>Skjulte ark (<code>xlSheetVeryHidden</code>; overlever <code>-Uninstall</code> med vilje)</h4>
+  <p><code>KontaktsentralenKonfig</code> er nøkkel/verdi i kolonne A/B. Nøkler:</p>
+  <table>
+    <thead><tr><th>Nøkkel</th><th>Innhold</th></tr></thead>
+    <tbody>
+      <tr><td><code>KTS_POSTBOKS</code></td><td>Delt postboks (valgt i Oppsett fra <code>Session.Folders</code>; ikke hardkodet til et bestemt postboksnavn).</td></tr>
+      <tr><td><code>KTS_KOL_EPOST</code></td><td>E-post-kolonner, pipe-liste (<code>Epost|CC</code>).</td></tr>
+      <tr><td><code>KTS_KOL_GJENKJENNING</code></td><td>Gjenkjenningskolonner (f.eks. skole-ID), pipe-liste.</td></tr>
+      <tr><td><code>KTS_KOL_RESPONS</code></td><td>= Kontrollkolonnen. Navnet er arv fra tidlig design; planlagt fjernet i en senere opprydding.</td></tr>
+      <tr><td><code>KTS_STARTPUNKT</code></td><td>Dato/tid; hard grense for hvor mye av postboksen som leses.</td></tr>
+      <tr><td><code>KTS_KATEGORI_PRIORITET</code></td><td>Pipe-liste; rekkefølge = prioritet (øverst = høyest).</td></tr>
+      <tr><td><code>KTS_KOL_VISNING</code></td><td>Visningskolonner, pipe-liste, maks 4. Standard = første e-post-/gjenkjenningskolonne.</td></tr>
+      <tr><td><code>KTS_KATEGORI_FARGER</code></td><td><code>navn=idx|…</code> der idx = Outlook-fargeindeks 1–25 (<code>Category.Color</code>).</td></tr>
+      <tr><td><code>KTS_KATEGORI_TILGJENGELIG</code></td><td>Postboksens egne kategorier (masterliste fra <code>Store.Categories</code>), brukt som knapper på radsiden.</td></tr>
+      <tr><td><code>KTS_TABELL</code></td><td>Valgt tabell (ListObject). Tom = første tabell i boka.</td></tr>
+      <tr><td><code>KTS_KOL_NOKKEL</code></td><td>Radnøkkelkolonne. Tom = første gjenkjenningskolonne, ellers første kolonne (<code>KtsNokkelKolonneNavn</code>).</td></tr>
+    </tbody>
+  </table>
+  <p>Historisk fantes også <code>KTS_KOL_OPPFOLGING</code> (Oppfølging-aksen; fjernet helt i 0.7.0) og en tidlig <code>KTS_KOL_RESPONS</code> som var valgfri (0.2.1) før den ble Kontrollkolonne og obligatorisk.</p>
+  <p><code>KontaktsentralenCache</code> har én rad per Outlook-e-post som er forsøkt koblet. Kolonner A–K:</p>
+  <table>
+    <thead><tr><th>Kol.</th><th>Navn</th><th>Innhold</th></tr></thead>
+    <tbody>
+      <tr><td>A</td><td><code>EntryID</code></td><td>Outlook-elementets ID (nøkkel i cachen).</td></tr>
+      <tr><td>B</td><td><code>StoreID</code></td><td>Postbokslager (for <code>GetItemFromID</code>).</td></tr>
+      <tr><td>C</td><td><code>RadNr</code></td><td>&gt;0 = koblet til denne raden, 0 = ingen sikker match, −1 = flertydig.</td></tr>
+      <tr><td>D</td><td><code>Kategori</code></td><td>Kategoristreng fra e-posten.</td></tr>
+      <tr><td>E</td><td><code>Emne</code></td><td></td></tr>
+      <tr><td>F</td><td><code>Avsender</code></td><td></td></tr>
+      <tr><td>G</td><td><code>Mottatt</code></td><td>Mottatt-tid.</td></tr>
+      <tr><td>H</td><td><code>ConversationID</code></td><td>Lar svar nr. 2/3 i samme samtale arve raden fra første sikre treff; overlever restart.</td></tr>
+      <tr><td>I</td><td><code>Arsak</code></td><td>Forklaring for uavklarte (ny i 0.8.0).</td></tr>
+      <tr><td>J</td><td><code>Mappe</code></td><td>Outlook-mappenavn (ny i 0.8.2; gamle cacherader får verdien etter neste «Skann nå»).</td></tr>
+      <tr><td>K</td><td><code>RadNokkel</code></td><td>Radnøkkel, tekstformat (ny i 0.10.0). Manglende header K1 = gammel cache som migreres.</td></tr>
+    </tbody>
+  </table>
+  <p>Cachen lagrer emne, avsender, mottatt-tid, kategori og mappe, <strong>ikke brødtekst</strong> (personvern/størrelse), men den <strong>følger med arbeidsboka hvis den deles</strong>.</p>
+
+  <h4>Data inn og ut</h4>
+  <ul>
+    <li><strong>Fra Excel:</strong> den valgte tabellen (ListObject): e-post-, gjenkjenning-, visnings-, radnøkkel- og Kontrollkolonner. <strong>Skrives:</strong> bare Kontrollkolonnen (tømmes og fylles på nytt ved hver skann; Håkon er advart mot egne notater der) og fargeformat i den, pluss de skjulte arkene.</li>
+    <li><strong>Fra Outlook:</strong> MailItem (<code>Subject</code>, <code>Body</code>, <code>ReceivedTime</code>, <code>Categories</code>, <code>SenderEmailAddress</code>/<code>GetExchangeUser</code>, <code>Recipients</code> for CC, <code>ConversationID</code>, <code>EntryID</code>/<code>StoreID</code>), <code>Store.Categories</code>/<code>Namespace.Categories</code> (<code>Name</code>, <code>Color</code>). <strong>Skrives:</strong> <code>MailItem.Categories</code> + <code>Save</code> (kun radsiden).</li>
+  </ul>
+
+  <h4>Modulens hovedfunksjoner (<code>modKontaktsentralen</code>)</h4>
+  <p><code>KjørSkann</code>, <code>FinnMatchendeRadNy</code>, <code>KtsLastCache</code> / <code>KtsLagreCache</code> / <code>KtsGjenoppbyggSessionFraCache</code> / <code>KtsSikreSessionFraCache</code>, <code>KtsLosOppRadNokler</code> / <code>KtsSettRadNokler</code>, <code>KtsAktivTabell</code> / <code>KtsFinnTabell</code> / <code>KtsAlleTabeller</code>, <code>KtsNokkelKolonneNavn</code>, <code>KtsHentRadData</code> / <code>KtsKolonneBredder</code> / <code>KtsByggRadliste</code>, <code>KtsKontrollstatusForRad</code>, <code>KtsSplitKategorier</code>, <code>KtsLagreKategoriFarger</code> / <code>KtsOutlookFargeRGB</code>, <code>KtsKategoriValgForRad</code>, <code>KtsLagreKategorierPaaMelding</code> / <code>KtsOppdaterEtterKategoriendring</code>, <code>KtsMatchUavklartTilRad</code>, <code>KtsAapneMelding</code> / <code>KtsAapneMeldingMedId</code>, <code>KtsGaTilRadStille</code>, <code>KtsTilpassVindu</code>, <code>KtsStilKnapp</code>, <code>VisKontaktsentralen</code>. Øvrige hjelpere som omtales i byggeloggen: <code>KtsSamleMapperRekursivt</code> (Inbox + alle undermapper), <code>KtsHentKategorierFraPostboks</code>, <code>KtsKategoriPrioritet</code>, <code>KtsSplitAdresser</code> / <code>KtsHarFellesAdresse</code> (eksakt adressesett), <code>KtsListeSkille</code> (Windows-listeskilletegn), <code>KtsOppdaterKategorilisteStille</code> (kun <code>GetObject</code>, starter aldri Outlook), <code>KtsRadNokkelFeil</code>, <code>KtsSjekkNokkelkolonne</code>, <code>KtsHaandterDobbeltklikk</code>, <code>SettComboHvisFinnes</code>, <code>KtsRadNavnForVisning</code>.</p>
+  <p>Modulnivå-strukturer (session): <code>KtsSisteMeldinger</code>, <code>KtsSisteTreff</code>, <code>KtsSisteUavklarte</code> (Collection), <code>KtsValgtRad</code>, <code>samtaleTilRad</code> (conversation → rad), <code>KtsUavklartApnetFraRad</code> (flagg). De må bygges på nytt fra cachen hver gang dashbord/radside åpnes, se <a href="#g-session-strukturer-ma-bygges-pa-nytt">gotcha</a>.</p>
+
+  <h4>Kontrollnavn per skjema</h4>
+  <ul>
+    <li><strong>Oppsett (<code>frmKtsOppsett</code>):</strong> <code>cboTabell</code>, <code>lstEpost</code>, <code>lstGjenkjenning</code>, <code>cboPostboks</code>, <code>txtStartpunkt</code>, <code>cboNokkel</code>, <code>cboRespons</code>, <code>lstVisning</code> (+ <code>cmdVisOpp</code>/<code>cmdVisNed</code>), <code>lstKategorier</code> (+ <code>cmdKatOpp</code>/<code>cmdKatNed</code>), <code>cmdLagre</code>, <code>cmdTilbake</code>. Todelt layout (venstre/høyre); tabellvelger øverst til høyre; knapper på Top 390.</li>
+    <li><strong>Dashbord (<code>frmKontaktsentralen</code>):</strong> <code>lblListeRamme</code>, <code>lblSnn</code> / <code>lblCnn1..4</code> / <code>lblTnn</code> / <code>lblMnn</code> (11 rader, nn = tosifret radnr), <code>sbRader</code> (ScrollBar, aldri fokus), <code>lblHdr1..6</code>, <code>txtSok</code>, <code>cmdSkann</code>, <code>cmdInnstillinger</code>, <code>cmdUavklarte</code>, <code>lblAntall</code>, <code>lblVersjon</code>. (Før 0.9.0 fantes ListBox <code>lstRader</code>.)</li>
+    <li><strong>Radside (<code>frmKtsRad</code>):</strong> <code>lstMeldinger</code>, <code>lblHdr1..5</code>, <code>cmdKat1..30</code> (pool av kategoriknapper), <code>cmdLagreKategori</code>, <code>cmdAngre</code>, <code>cmdAapneOutlook</code>, <code>cmdMatchUavklart</code>, <code>cmdHovedmeny</code>.</li>
+    <li><strong>Uavklart (<code>frmKtsUavklart</code>):</strong> <code>lstUavklarte</code>, <code>lstRaderMatch</code>, <code>txtSok</code>, <code>cmdMatch</code>, <code>cmdTilbake</code>.</li>
+  </ul>
+  <p>Click/DblClick-handlere for de poolede Label-/knappkontrollene (<code>lblT03_Click</code> osv., <code>cmdKatN_Click</code>) genereres i en PowerShell-løkke i installeren. Kontrollnavn uten underscore.</p>
+

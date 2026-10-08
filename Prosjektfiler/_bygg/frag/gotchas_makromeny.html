@@ -1,0 +1,329 @@
+<div class="gotcha" id="g-static-worksheet-krasj" data-cat="vba">
+  <h4>Worksheet-objekt i Static-variabel gir Excel-krasj</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Excel krasjer når man aktiverer et ark (Makromenys ark-fane) etter at et annet ark er slettet. Kritisk feil i Makromeny 2.2.0 og eldre.</dd>
+    <dt>Årsak</dt><dd><code>HaandterArkAktivering</code> lagret forrige ark som <code>Worksheet</code>-objekt i en <code>Static</code>-variabel. Når arket senere ble slettet, ble referansen stale, og bruk av den kræsjet Excel.</dd>
+    <dt>Løsning</dt><dd>Lagre bare <em>navnet</em> (<code>Static ForrigeArkNavn As String</code>), slå arket opp på nytt hver gang og sjekk <code>ArkFinnes</code> først. Generell regel: hold aldri COM-/Office-objekter i <code>Static</code>- eller modulnivå-variabler som overlever ark- eller bokendringer. Fikset i v2.2.1.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (funnet i Nettskjema-henter-økta)</p>
+</div>
+
+<div class="gotcha" id="g-crossworkbook-onaction" data-cat="excel">
+  <h4>Cross-workbook OnAction: knapp koblet til feil arbeidsbok</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Når flere arbeidsbøker er åpne i samme Excel-prosess, får en nyinstallert knapp OnAction til feil bok, f.eks. <code>'Hovedarbeidsboken.xlsm'!VisMakroMeny</code> selv om installasjonen gjaldt en annen fil.</dd>
+    <dt>Årsak</dt><dd><code>Buttons.OnAction</code> med en ukvalifisert streng løses mot den <em>aktive</em> boka, ikke boka knappen ligger i.</dd>
+    <dt>Løsning</dt><dd>I installeren: <code>$wb.Activate()</code> før knapp-plassering, og sett <code>$btn.OnAction = "'" + $wb.Name + "'!Makronavn"</code>. Ved avinstallasjon: godta både «Navn» og kvalifisert form (<code>-like "*!Navn"</code>; Nettskjema-henter fjerner prefikset med regex <code>^'.*'!</code>). Fiksen er lagt inn i alle fem installerscript (Kolonnevelger, Mail-utsender, Kontaktsentralen, Nettskjema-henter, Makromeny).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (og de fire andre installerne)</p>
+</div>
+
+<div class="gotcha" id="g-utf8-bom-aeoeaa" data-cat="encoding">
+  <h4>Norske tegn ødelagt (æøå blir Ã¸ osv.) i .ps1</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Tekst med æøå i VBA-koden eller meldinger blir «Ã¸», «Ã¥» osv. etter installasjon.</dd>
+    <dt>Årsak</dt><dd>Windows PowerShell 5.1 leser en .ps1 som er UTF-8 <em>uten</em> BOM som ANSI. Fire av installerne har UTF-8 BOM (<code>EF BB BF</code>); <code>Makromeny.ps1</code> er skrevet via Write-verktøy og har <em>ikke</em> BOM.</dd>
+    <dt>Løsning</dt><dd>Enten lagre med BOM, eller (som Makromeny) ha null rå æøå i fila: bruk token <code>{AA}</code>/<code>{OE}</code>/<code>{AE}</code> i VBA-teksten og bytt dem med <code>[char]0x00E5</code>/<code>0x00F8</code>/<code>0x00E6</code> via <code>-replace</code> før <code>AddFromString</code>. Gjelder også scratch-scripts. Kontroller med byteskanning: se etter <code>EF BB BF</code> (BOM) og byte <code>0xC3</code> (rå UTF-8 æøå).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-msforms-specialeffect" data-cat="msforms">
+  <h4>MSForms CommandButton har ikke .SpecialEffect</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Menyen «henger» stille når den åpnes; ingen synlig feilmelding.</dd>
+    <dt>Årsak</dt><dd><code>CommandButton</code> i MSForms har ingen egenskap <code>.SpecialEffect</code> (den finnes på andre kontroller). Kode som setter den gir run-time error 438, men feildialogen (vindusklasse <code>#32770</code>) legger seg <em>bak</em> det modale skjemaet og er usynlig for brukeren.</dd>
+    <dt>Løsning</dt><dd>Fjern egenskapen. Diagnose: se <a href="#g-skjult-feildialog-modal">skjult feildialog bak modalt skjema</a>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-skjult-feildialog-modal" data-cat="testing">
+  <h4>Excel «henger» med modalt skjema: se etter skjult #32770-dialog</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Excel virker hengt (stille) mens et modalt UserForm er oppe.</dd>
+    <dt>Årsak</dt><dd>En feil- eller advarselsdialog (vindusklasse <code>#32770</code>) ligger bak det modale skjemaet, så brukeren ser den ikke og skjemaet blir ikke klikkbart.</dd>
+    <dt>Løsning</dt><dd>Enumerer vinduer med <code>EnumWindows</code> filtrert på Excel-prosessens PID og finn <code>#32770</code>; les teksten og lukk den. Første mistanke ved «stille hang»: en run-time error i skjemainitialiseringen (jf. <a href="#g-msforms-specialeffect">SpecialEffect</a>).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-dynamiske-kontroller-withevents" data-cat="msforms">
+  <h4>Dynamiske UserForm-kontroller trenger WithEvents-klasse (og må holdes i live)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Dynamisk opprettede knapper (fliser) reagerer ikke på klikk.</dd>
+    <dt>Årsak</dt><dd>Hendelser på kontroller som lages i kode krever en klasse med <code>WithEvents</code>-variabel (her <code>clsMakroTile</code>). Hvis klasseinstansen ikke holdes i live, blir handleren søppelsamlet.</dd>
+    <dt>Løsning</dt><dd>Lag én <code>clsMakroTile</code>-instans per flis og hold dem i en <code>Collection</code> på skjemanivå.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-unload-for-run" data-cat="msforms">
+  <h4>Unload skjemaet FØR Application.Run (kopier data først)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Menyen ble liggende igjen i bakgrunnen når den valgte makroen åpnet sitt eget skjema.</dd>
+    <dt>Årsak</dt><dd>Makroen ble kjørt mens menyskjemaet fortsatt var lastet/modalt.</dd>
+    <dt>Løsning</dt><dd>I <code>Btn_Click</code> (klassen <code>clsMakroTile</code>): kopier <code>OnActionNavn</code> til en lokal variabel, kjør <code>Unload frmMakroMeny</code>, kall deretter <code>KjorValgtMakro</code>. Kopien er nødvendig fordi klasseinstansen ødelegges ved Unload.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-application-cursor-xlwait" data-cat="vba">
+  <h4>Application.Cursor = xlWait gir hengende blå laster-markør</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Musepekeren blir en blå «laster»-markør som ikke går tilbake når makroen som startes fra menyen kjører (eller åpner eget skjema).</dd>
+    <dt>Årsak</dt><dd>Å sette <code>Application.Cursor = xlWait</code> rundt <code>Application.Run</code> låser markøren mens andre makroer viser skjemaer.</dd>
+    <dt>Løsning</dt><dd>Ikke sett <code>Application.Cursor</code> i menyen (fjernet); aldri <code>xlWait</code> rundt <code>Application.Run</code>. Det gamle ChatGPT-utkastet gjorde dette.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-line-continuations-base64" data-cat="vba">
+  <h4>«Too many line continuations» (maks ca. 24) med base64 i VBA</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kompileringsfeil «Too many line continuations» når en lang base64-streng skrives som én <code>Const</code> eller én lang setning med linjefortsettelser (<code>_</code>).</dd>
+    <dt>Årsak</dt><dd>VBA tillater maks ca. 24 linjefortsettelser per setning.</dd>
+    <dt>Løsning</dt><dd>Bygg strengen med gjentatte <code>s = s &amp; "..."</code> i biter på ca. 200 tegn (som <code>Make-Base64.ps1</code> genererer til <code>IconB64_*</code>-funksjonene).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-gethicon-256-korrupt" data-cat="powershell">
+  <h4>256x256 32-bit alfa-ikon via GetHicon blir korrupt (strimlet i EMI)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ikonet vises strimlet/korrupt i EMI.</dd>
+    <dt>Årsak</dt><dd><code>Bitmap.GetHicon()</code> + <code>Icon.Save()</code> korrumperer 256x256 32-bit alfa-ikoner i .NET Framework (Windows PowerShell 5.1).</dd>
+    <dt>Løsning</dt><dd>Bruk 128x128 via <code>GetHicon</code> (verifisert; brukt for alle fem <code>icon-*.ico</code> à 67 646 byte). Verifiser alltid den <em>lagrede</em> fila (<a href="#g-ikon-verifisering-inmemory">ikonverifisering</a>).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (Convert-UserIcons.ps1)</p>
+</div>
+
+<div class="gotcha" id="g-png-i-ico" data-cat="powershell">
+  <h4>PNG-i-ICO leses ikke av System.Drawing.Icon (.NET Framework)</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>ToBitmap</code> kaster «Requested range extends past the end of the array» når en .ico med innebygd PNG lastes.</dd>
+    <dt>Årsak</dt><dd><code>System.Drawing.Icon</code> i .NET Framework (PS 5.1) støtter ikke PNG-komprimerte ikonbilder.</dd>
+    <dt>Løsning</dt><dd>Ikke bruk PNG-i-ICO her; lagre via <code>GetHicon</code> ved 128x128. Hvis man bygger ICO for hånd, se <a href="#g-dib-i-ico-biheight">DIB-i-ICO</a>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-dib-i-ico-biheight" data-cat="powershell">
+  <h4>Håndbygd DIB-i-ICO må ha biHeight doblet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Selvbygd ICO med DIB-data lastes feil eller vises forskjøvet/korrupt.</dd>
+    <dt>Årsak</dt><dd>I ICO-formatet inneholder <code>BITMAPINFOHEADER.biHeight</code> høyden på XOR-bildet + AND-masken, dvs. dobbel høyde.</dd>
+    <dt>Løsning</dt><dd>Sett <code>biHeight</code> = 2 x ikonhøyden når DIB skrives for hånd.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-ikon-verifisering-inmemory" data-cat="testing">
+  <h4>Ikonverifisering: ikke lagre PNG fra in-memory-bitmap</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ikonet ser fint ut i en forhåndsvisning, men er korrupt når EMI/Windows laster .ico-fila.</dd>
+    <dt>Årsak</dt><dd>Et in-memory <code>Bitmap</code> (eller PNG lagret fra det) er ikke den lagrede .ico-fila; korrupsjonen oppstår i <code>Icon.Save</code>.</dd>
+    <dt>Løsning</dt><dd>Last den <em>lagrede</em> .ico på nytt med <code>New-Object System.Drawing.Icon</code>, sjekk <code>Width</code>/<code>Height</code> og rendre den via en ekte WinForms <code>PictureBox</code> (<code>Verify-RealRender.ps1</code>). Se <a href="#t-makromeny-ikonverifisering">testteknikken</a>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-base64-bmp-i-vba" data-cat="vba">
+  <h4>Embedded ikoner i VBA: base64-BMP, ikke palett</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ikoner på UserForm-knapper mangler, får feil farger eller er vanskelige å legge inn som ressurs.</dd>
+    <dt>Årsak</dt><dd>MSForms <code>.Picture</code> tar et <code>StdPicture</code>, ikke en fil-/ressursreferanse. 256-fargers palett gir dårlig gjengivelse.</dd>
+    <dt>Løsning</dt><dd>Regenerer 40x40 BMP fra det gode 128 px-ikonet (<code>Make-Base64.ps1</code>), lagre som base64 i VBA (<code>IconB64_*</code>), dekod med <code>MSXML2.DOMDocument</code> (<code>bin.base64</code>, <code>Base64ToBytes</code>), skriv temp <code>.bmp</code> og last med <code>LoadPicture</code> (<code>LastIkonFraBase64</code>). Bruk 24/32-bit, ikke 256-fargers palett.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-emi-ikoner-runtime-ps2exe" data-cat="installer">
+  <h4>EMI leser ikoner fra disk ved kjøring; ps2exe-bygging</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Nye eller endrede ikoner vises ikke i EMI selv om <code>Resources\icon-*.ico</code> er byttet.</dd>
+    <dt>Årsak</dt><dd>EMI leser ikonene fra disk ved oppstart av appen; en kjørende <code>.exe</code> bruker de gamle.</dd>
+    <dt>Løsning</dt><dd>Start EMI på nytt. Ved endring i EMI-kilden: ta backup av <code>.exe</code> først (f.eks. <code>.exe.bak-v2.4.6.0</code>), kompiler med <code>Invoke-ps2exe ... -iconFile Resources\icon.ico -noConsole -STA -version "&lt;ny&gt;"</code>; husk <code>-noConsole -STA</code> og et nytt <code>-version</code> (nå 2.4.7.0).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny / EMI</p>
+</div>
+
+<div class="gotcha" id="g-emi-fiks-aktiveres-ikke-uten-oppdater" data-cat="installer">
+  <h4>Fiks i EMI\Macros virker ikke i brukerens filer før «Oppdater»</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kjent feil (f.eks. krasjen i Makromeny 2.2.0) vedvarer i Håkons ekte filer selv om koden er rettet i kilden.</dd>
+    <dt>Årsak</dt><dd>VBA-koden ligger <em>inni</em> hver .xlsm etter installasjon. Hovedarbeidsboken og Testfil kjører Makromeny 2.0.0 til «Oppdater» kjøres i EMI; installeren sammenligner versjonsmarkør og oppdaterer bare ved ulik versjon.</dd>
+    <dt>Løsning</dt><dd>Øk versjonsmarkøren (<code>MAKROMENY_VERSION</code>) ved hver endring, og be Håkon trykke «Oppdater» i EMI for hver bok. Rapporter tydelig hva som er aktivt i hans filer og ikke.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-ps-komma-operator" data-cat="powershell">
+  <h4>PowerShell: komma-operatoren binder sterkere enn minus</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>($a,$b-2)</code> gir en feil array (og feil resultat).</dd>
+    <dt>Årsak</dt><dd>Komma-operatoren har høyere presedens enn binær minus.</dd>
+    <dt>Løsning</dt><dd>Parenteser rundt uttrykket: <code>($a, ($b-2))</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (ikon-scripts)</p>
+</div>
+
+<div class="gotcha" id="g-ps-pen-single" data-cat="powershell">
+  <h4>New-Object Pen($color,$double) feiler: cast til [single]</h4>
+  <dl>
+    <dt>Symptom</dt><dd><code>New-Object System.Drawing.Pen($color, $bredde)</code> feiler.</dd>
+    <dt>Årsak</dt><dd>Konstruktøren venter <code>float</code> (<code>[single]</code>); PowerShell sender <code>[double]</code> og finner ingen overload.</dd>
+    <dt>Løsning</dt><dd>Cast eksplisitt: <code>[single]$bredde</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (ikon-scripts)</p>
+</div>
+
+<div class="gotcha" id="g-ps-pid-reservert" data-cat="powershell">
+  <h4>PowerShell: $pid er reservert (skrivebeskyttet)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Tilordning til en variabel kalt <code>$pid</code> feiler.</dd>
+    <dt>Årsak</dt><dd><code>$PID</code> er en automatisk, skrivebeskyttet variabel (id til den kjørende PowerShell-prosessen).</dd>
+    <dt>Løsning</dt><dd>Bruk et annet variabelnavn, f.eks. <code>$excelPid</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny (test-scripts)</p>
+</div>
+
+<div class="gotcha" id="g-ps-addtype-persistens" data-cat="process">
+  <h4>Add-Type-typer og variabler overlever ikke mellom verktøykall</h4>
+  <dl>
+    <dt>Symptom</dt><dd>En type definert med <code>Add-Type</code> (f.eks. P/Invoke for EnumWindows/PostMessage), eller variabler satt i et tidligere kall, er «ikke funnet» i neste verktøykall.</dd>
+    <dt>Årsak</dt><dd>Hvert PowerShell-kall i verktøyet kjører i en ny prosess; ingen tilstand videreføres.</dd>
+    <dt>Løsning</dt><dd>Legg <code>Add-Type</code> og all oppsett i samme script/kall som bruker dem (lag gjenbrukbare .ps1-filer, f.eks. <code>Run-CrashTest.ps1</code>).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-rot-enumerering" data-cat="com">
+  <h4>ROT-enumerering via late-bound COM feilet: bruk GetActiveObject</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Forsøk på å finne riktig Excel-instans/bok via Running Object Table (ROT) med late-bound COM (<code>Find-MyExcel.ps1</code>) fungerte ikke.</dd>
+    <dt>Årsak</dt><dd>ROT-enumerering lot seg ikke gjøre pålitelig via late-bound COM i denne PowerShell-oppsettet (årsaken er ikke undersøkt videre).</dd>
+    <dt>Løsning</dt><dd>Bruk <code>[Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")</code> og finn boka på fullt filnavn (<code>FullName</code>). Scriptet er beholdt som «ikke anbefalt».</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-ps-herestring-vba" data-cat="powershell">
+  <h4>Doble anførselstegn i PowerShell here-string ødela VBA-koden</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Compile error»-dialog i Excel etter import av VBA generert fra et PowerShell-script; VBA-tekstliteraler ble tomme eller feil.</dd>
+    <dt>Årsak</dt><dd>VBA-koden lå i en dobbeltfnutt-here-string (<code>@"..."@</code>) der PowerShell tolker <code>"</code>, <code>$</code> og backtick.</dd>
+    <dt>Løsning</dt><dd>Bruk alltid enkeltfnutt-here-string <code>@'...'@</code> for VBA (ingen interpolering); sett inn dynamiske verdier separat via <code>-replace</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-delt-excel-application-run" data-cat="excel">
+  <h4>Ukvalifisert Application.Run feiler med flere åpne bøker</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Kan ikke kjøre makroen…» fra <code>Application.Run "Makronavn"</code> / <code>$excel.Run("Makronavn")</code>; én gang HRESULT <code>0x800A802D</code>.</dd>
+    <dt>Årsak</dt><dd>Alle økter og bøker deler <em>én</em> <code>Excel.Application</code> (<code>GetActiveObject</code>). Ukvalifisert navn søkes ikke nødvendigvis i riktig bok.</dd>
+    <dt>Løsning</dt><dd>Kvalifiser med bok: <code>Application.Run "'Bok.xlsm'!Makro"</code> eller <code>$excel.Run("'Bok.xlsm'!Makro")</code>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-delt-excel-instans-opprydding" data-cat="testing">
+  <h4>Delt Excel-instans: unike filnavn, aldri Quit, rydd bare egne prosesser</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Test som lukker Excel eller gjenbruker filnavn treffer Håkons åpne arbeidsbøker; spøkelsesprosesser blir liggende igjen.</dd>
+    <dt>Årsak</dt><dd>Alle økter/bøker deler én Excel-instans; en test kan derfor ødelegge andres arbeid.</dd>
+    <dt>Løsning</dt><dd>Unike kastefilnavn (<code>MakromenyCrashTest2_&lt;tilfeldig&gt;.xlsm</code>); aldri <code>Quit</code> på den delte instansen; lukk kun egen testbok med <code>Close($false)</code>; drep bare egne <code>EXCEL.EXE</code>-spøkelser etter å ha bekreftet PID via vindustittel; slett kastefila.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-vbproject-trust" data-cat="excel">
+  <h4>VBProject-tilgang krever «Trust access to the VBA project object model»</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kall mot <code>VBProject.VBComponents</code> feiler (1004-lignende feil); menyen ville vært tom.</dd>
+    <dt>Årsak</dt><dd>Excel blokkerer programmatisk tilgang til VBA-prosjektet med mindre innstillingen «Trust access to the VBA project object model» er på (Makromeny 2.2.0+ bruker VBComponents til deteksjon; EMI krever den også).</dd>
+    <dt>Løsning</dt><dd>Sjekk med <code>HarVBAProjektTilgang</code> og vis en vennlig melding i <code>lblStatus</code> (ingen fliser) i stedet for å krasje eller vise tom meny. Be brukeren skru på innstillingen.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-ark-knapp-sheetactivate" data-cat="vba">
+  <h4>Ark-knapp: Workbook_SheetActivate i ThisWorkbook</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kompileringsfeil (duplikat-prosedyre) som blokkerer alle makroer i boka hvis installeren legger til <code>Workbook_SheetActivate</code> når den finnes fra før; eller rester i ThisWorkbook etter avinstallasjon.</dd>
+    <dt>Årsak</dt><dd>To prosedyrer med samme navn i <code>ThisWorkbook</code> er en kompileringsfeil. Uten markører kan injisert kode ikke fjernes trygt.</dd>
+    <dt>Løsning</dt><dd>Injiser stub bare mellom markørkommentarene <code>'===MAKROMENY_ARKKNAPP_START===</code>/<code>'===MAKROMENY_ARKKNAPP_SLUTT===</code>; hopp over med advarsel hvis prosedyren finnes. I stubben: sjekk <code>TypeName(Sh) = "Worksheet"</code>, bruk <code>On Error Resume Next</code>, aktiver forrige ark (<code>ForrigeArkNavn</code>) og kall <code>VisMakroMeny</code>. Av/på legger til/fjerner selve arket; innstillingsarket er Very Hidden.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-msforms-avrunding" data-cat="msforms">
+  <h4>MSForms har ikke ekte avrundede knapper</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ønsket «app-lignende» avrundede fliser lar seg ikke lage med vanlige kontroller.</dd>
+    <dt>Årsak</dt><dd>MSForms <code>CommandButton</code> har ingen avrundingsegenskap og (som over) ikke <code>.SpecialEffect</code>.</dd>
+    <dt>Løsning</dt><dd>Bruk fargede <code>CommandButton</code> med ikon (<code>.Picture</code>, <code>PicturePosition = fmPicturePositionAboveCenter</code>) som nærmeste løsning; ikonene har avrundede badges. Bedre avrunding via Frame/Image er en åpen idé.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-modal-skjema-testing" data-cat="testing">
+  <h4>Modalt UserForm blokkerer testskriptet</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et test-script som åpner et modalt skjema henger til noen lukker skjemaet.</dd>
+    <dt>Årsak</dt><dd>Modale skjemaer blokkerer kallet som viste dem.</dd>
+    <dt>Løsning</dt><dd>Kjør trigger i bakgrunnen (med timeout), finn vinduet med <code>EnumWindows</code> (klasse <code>ThunderDFrame</code>, caption «Makromeny»), ta skjermbilde med <code>PrintWindow(hwnd)</code> og lukk med <code>PostMessage(hwnd, 0x0010 /* WM_CLOSE */, 0, 0)</code>. Se <a href="#t-makromeny-modal-skjema">testteknikken</a>.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-koordinat-skjermbilde" data-cat="testing">
+  <h4>Koordinatbaserte skjermbilder kan fange brukerens andre vinduer</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Et skjermbilde tatt av et skjermområde fanget nesten Håkons sidepanel (bildet ble slettet umiddelbart).</dd>
+    <dt>Årsak</dt><dd>Koordinatbasert skjermdump tar det som ligger på skjermen, ikke bare målvinduet.</dd>
+    <dt>Løsning</dt><dd>Bruk <code>PrintWindow(hwnd)</code> mot testvinduet i stedet for koordinatbaserte skjermbilder.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-uia-userform" data-cat="testing">
+  <h4>UserForm-kontroller er ikke synlige for UI Automation</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Ekte museklikk på en dynamisk flis lot seg ikke scripte.</dd>
+    <dt>Årsak</dt><dd>MSForms-kontroller eksponeres ikke i UI Automation.</dd>
+    <dt>Løsning</dt><dd>Verifiser delene hver for seg (bygging av menyen, Unload før Run, selve Run), og be Håkon gjøre den ekte klikk-testen; rapporter ærlig at den ikke er automatisk verifisert.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-kompilering-kastefil" data-cat="vba">
+  <h4>VBA-feil viser seg først ved kompilering/kjøring; test i kastefil</h4>
+  <dl>
+    <dt>Symptom</dt><dd>«Compile error»-dialog dukker opp på Håkons skjerm når test-VBA er feil; en kompileringsfeil i én modul blokkerer alle makroer i boka (jf. duplikat <code>Workbook_SheetActivate</code>).</dd>
+    <dt>Årsak</dt><dd>VBA kompileres først ved kjøring/import; PowerShell-scriptet ser ikke syntaksfeil i VBA-teksten.</dd>
+    <dt>Løsning</dt><dd>Test alltid nytt VBA i en egen kastefil (aldri i Håkons ekte filer) og verifiser at boka kompilerer.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-releasecomobject" data-cat="com">
+  <h4>Frigjør COM-objekter i PowerShell etter feil (ellers spøkelses-EXCEL.EXE)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Usynlige <code>EXCEL.EXE</code>-prosesser blir liggende igjen etter at et script feilet.</dd>
+    <dt>Årsak</dt><dd>PowerShell holder COM-referanser til Excel-objekter i live etter feil.</dd>
+    <dt>Løsning</dt><dd>Frigjør objekter eksplisitt: <code>[Runtime.InteropServices.Marshal]::ReleaseComObject(...)</code> (også i feilgrener/<code>finally</code>).</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-stale-header-kommentar" data-cat="process">
+  <h4>Stale header-kommentar i Makromeny.ps1 (linje 15–18)</h4>
+  <dl>
+    <dt>Symptom</dt><dd>Kommentaren øverst i <code>Makromeny.ps1</code> sier fortsatt at deteksjonen bruker <code>Buttons()</code>/<code>OnAction</code>.</dd>
+    <dt>Årsak</dt><dd>Deteksjonen ble byttet til VBA-komponentnavn i v2.2.0, men kommentaren ble ikke oppdatert.</dd>
+    <dt>Løsning</dt><dd>Ufarlig; rettes ved neste versjon. En ny AI som leser scriptet skal stole på koden og denne dokumentasjonen, ikke header-kommentaren.</dd>
+  </dl>
+  <p class="src">Kilde: Makromeny</p>
+</div>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="nb" data-build="{{DATO}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excel VBA Koding</title>
+<meta name="description" content="Samlet kunnskapsbase for Excel VBA-koding: prosjektoversikt, arbeidsmetode, fallgruver, testteknikker og dokumentasjon av alle makroer i Excel Macro Installer (EMI). Onboarding-fil for AI-sessions.">
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --panel2:#f0f2f5; --text:#1c2230; --muted:#5b6478; --line:#dfe3ea;
+  --accent:#2563eb; --accent-soft:#dbe7ff; --code-bg:#f1f3f7; --code-text:#1f2937;
+  --warn-bg:#fff4e0; --warn-line:#f0b45a; --warn-text:#6b4200; --note-bg:#e8f1ff; --note-line:#8fb4f5; --note-text:#153a7a;
+  --ok:#0f7b4b; --bad:#b42318; --mark:#ffe066; --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 14px rgba(15,23,42,.05);
+  --c-vba:#7c3aed; --c-excel:#0f7b4b; --c-com:#b45309; --c-powershell:#1d4ed8; --c-msforms:#be185d; --c-outlook:#0e7490; --c-encoding:#4d7c0f; --c-installer:#9a3412; --c-testing:#475569; --c-api:#0369a1; --c-process:#a21caf;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f131a; --panel:#171c25; --panel2:#1e2531; --text:#e6e9ef; --muted:#9aa4b8; --line:#2b3446;
+    --accent:#7aa2ff; --accent-soft:#1f2c4d; --code-bg:#10151d; --code-text:#d6deeb;
+    --warn-bg:#3a2a10; --warn-line:#a86a12; --warn-text:#ffd9a0; --note-bg:#14243f; --note-line:#3a5fa3; --note-text:#b9d0ff;
+    --ok:#4ade80; --bad:#f87171; --mark:#6b5a00; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+    --c-vba:#b79cff; --c-excel:#5eea9e; --c-com:#fbbf6b; --c-powershell:#8fb4ff; --c-msforms:#f59bc4; --c-outlook:#67d4e6; --c-encoding:#b6e36b; --c-installer:#fca77a; --c-testing:#b4bfd1; --c-api:#7cc7f5; --c-process:#e9a6f5;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f131a; --panel:#171c25; --panel2:#1e2531; --text:#e6e9ef; --muted:#9aa4b8; --line:#2b3446;
+  --accent:#7aa2ff; --accent-soft:#1f2c4d; --code-bg:#10151d; --code-text:#d6deeb;
+  --warn-bg:#3a2a10; --warn-line:#a86a12; --warn-text:#ffd9a0; --note-bg:#14243f; --note-line:#3a5fa3; --note-text:#b9d0ff;
+  --ok:#4ade80; --bad:#f87171; --mark:#6b5a00; --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+  --c-vba:#b79cff; --c-excel:#5eea9e; --c-com:#fbbf6b; --c-powershell:#8fb4ff; --c-msforms:#f59bc4; --c-outlook:#67d4e6; --c-encoding:#b6e36b; --c-installer:#fca77a; --c-testing:#b4bfd1; --c-api:#7cc7f5; --c-process:#e9a6f5;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 "Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+code,pre,kbd{font-family:Consolas,"Cascadia Mono","SFMono-Regular",Menlo,monospace}
+code{background:var(--code-bg);color:var(--code-text);padding:.08em .35em;border-radius:4px;font-size:.88em;word-break:break-word}
+pre{background:var(--code-bg);color:var(--code-text);padding:12px 14px;border-radius:8px;overflow:auto;border:1px solid var(--line);font-size:.86em;line-height:1.5}
+pre code{background:none;padding:0;font-size:inherit}
+mark.hit{background:var(--mark);color:inherit;border-radius:2px;padding:0 1px}
+mark.hit.cur{outline:2px solid var(--accent)}
+
+/* Topbar */
+.topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;padding:9px 18px}
+.topbar .brand{font-weight:700;letter-spacing:.2px;white-space:nowrap}
+.topbar .brand small{display:block;font-weight:400;color:var(--muted);font-size:11.5px;line-height:1.1}
+.search{flex:1;display:flex;gap:6px;align-items:center;max-width:720px}
+.search input{flex:1;min-width:120px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit}
+.search input:focus{outline:2px solid var(--accent);border-color:transparent}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:7px 11px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel2)}
+.count{font-size:12.5px;color:var(--muted);min-width:70px;white-space:nowrap}
+.menu-btn{display:none}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:290px minmax(0,1fr);gap:0;max-width:1700px;margin:0 auto}
+nav.side{position:sticky;top:57px;align-self:start;height:calc(100vh - 57px);overflow:auto;padding:16px 10px 40px 18px;border-right:1px solid var(--line);font-size:13.5px}
+nav.side h6{margin:16px 6px 6px;font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)}
+nav.side a{display:block;padding:5px 8px;border-radius:6px;color:var(--text);line-height:1.3}
+nav.side a:hover{background:var(--panel2);text-decoration:none}
+nav.side a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav.side a .st{display:block;font-size:11px;color:var(--muted);font-weight:400}
+main{padding:22px clamp(16px,3vw,44px) 90px;min-width:0}
+main>section{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px clamp(16px,2.4vw,34px) 26px;margin:0 0 22px;max-width:1240px}
+h1{font-size:30px;line-height:1.2;margin:.1em 0 .3em}
+h2{font-size:24px;line-height:1.25;margin:0 0 .5em;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h3{font-size:18px;margin:1.6em 0 .45em;padding-bottom:.25em;border-bottom:1px solid var(--line)}
+h4{font-size:15.5px;margin:1.2em 0 .35em}
+p{margin:.55em 0} ul,ol{margin:.5em 0;padding-left:1.35em} li{margin:.22em 0}
+.lead{font-size:16.5px;color:var(--muted);margin-top:0}
+.chip{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);letter-spacing:.2px;vertical-align:middle}
+.status{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.status.dev{background:color-mix(in srgb,#d97706 18%,transparent);color:#b45309}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .status.dev{color:#fbbf6b}}
+:root[data-theme="dark"] .status.dev{color:#fbbf6b}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2);font-weight:600;white-space:nowrap}
+table.hist td:first-child{white-space:nowrap;font-weight:600;width:1%}
+dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:.9em 0}
+dl.facts dt{color:var(--muted);font-weight:600} dl.facts dd{margin:0;min-width:0}
+.callout{border-left:4px solid;border-radius:8px;padding:9px 14px;margin:.9em 0}
+.callout.warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-text)}
+.callout.note{background:var(--note-bg);border-color:var(--note-line);color:var(--note-text)}
+.callout>:first-child{margin-top:0}.callout>:last-child{margin-bottom:0}
+.callout code{background:color-mix(in srgb,var(--code-bg) 60%,transparent)}
+
+/* Gotchas + techniques */
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;margin:.6em 0 1em;align-items:center}
+.toolbar .fc{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:999px;padding:4px 12px;font-size:12.5px;cursor:pointer}
+.toolbar .fc[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:transparent}
+.gotcha,.technique{border:1px solid var(--line);border-left:5px solid var(--cat,var(--muted));border-radius:10px;background:var(--panel);padding:10px 16px 12px;margin:12px 0;position:relative}
+.gotcha[data-cat="vba"]{--cat:var(--c-vba)} .gotcha[data-cat="excel"]{--cat:var(--c-excel)} .gotcha[data-cat="com"]{--cat:var(--c-com)}
+.gotcha[data-cat="powershell"]{--cat:var(--c-powershell)} .gotcha[data-cat="msforms"]{--cat:var(--c-msforms)} .gotcha[data-cat="outlook"]{--cat:var(--c-outlook)}
+.gotcha[data-cat="encoding"]{--cat:var(--c-encoding)} .gotcha[data-cat="installer"]{--cat:var(--c-installer)} .gotcha[data-cat="testing"]{--cat:var(--c-testing)}
+.gotcha[data-cat="api"]{--cat:var(--c-api)} .gotcha[data-cat="process"]{--cat:var(--c-process)}
+.gotcha h4,.technique h4{margin:0 0 .35em;font-size:15.5px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.gotcha h4::after{content:attr(data-cat);order:9}
+.gotcha[data-cat]::before{content:attr(data-cat);position:absolute;top:10px;right:14px;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;font-weight:700;color:var(--cat)}
+.gotcha h4::after{content:none}
+.gotcha dl{display:grid;grid-template-columns:78px 1fr;gap:3px 12px;margin:.3em 0 0}
+.gotcha dt{color:var(--muted);font-weight:600;font-size:13px;padding-top:1px} .gotcha dd{margin:0;min-width:0}
+.gotcha .src{margin:.5em 0 0;font-size:12px;color:var(--muted)}
+.gotcha.hide,.technique.hide{display:none}
+.gotcha:target,.technique:target{outline:2px solid var(--accent)}
+details.acc{border:1px solid var(--line);border-radius:10px;margin:.8em 0;background:var(--panel)}
+details.acc>summary{cursor:pointer;padding:9px 14px;font-weight:600;list-style:none}
+details.acc>summary::before{content:"▸ ";color:var(--muted)} details.acc[open]>summary::before{content:"▾ "}
+details.acc>div{padding:0 16px 12px}
+.macro>.collapser{margin-left:auto}
+.macro.collapsed>*:not(h2):not(.lead){display:none}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:var(--panel2)}
+.card h4{margin-top:0}
+.tiny{font-size:12.5px;color:var(--muted)}
+footer.end{max-width:1240px;color:var(--muted);font-size:12.5px;padding:0 6px}
+@media (max-width:980px){
+  .layout{grid-template-columns:1fr}
+  nav.side{position:fixed;left:0;top:57px;bottom:0;width:min(320px,88vw);background:var(--panel);z-index:60;transform:translateX(-102%);transition:transform .2s;height:auto;box-shadow:var(--shadow)}
+  body.navopen nav.side{transform:none}
+  .menu-btn{display:inline-block}
+  .topbar .brand small{display:none}
+  .gotcha dl{grid-template-columns:1fr}
+}
+@media print{
+  .topbar,nav.side,.toolbar,.collapser{display:none!important} .layout{display:block}
+  main>section{box-shadow:none;border:none;page-break-inside:auto;max-width:none} .macro.collapsed>*{display:revert!important}
+  body{background:#fff;color:#000}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="btn menu-btn" id="menuBtn" aria-label="Meny">☰</button>
+  <div class="brand">Excel VBA Koding<small>kunnskapsbase · bygget {{DATO}}</small></div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Søk i hele siden (fallgruver, makroer, feilmeldinger …)  ·  Ctrl+K" autocomplete="off">
+    <button class="btn" id="prev" title="Forrige treff (Shift+Enter)">↑</button>
+    <button class="btn" id="next" title="Neste treff (Enter)">↓</button>
+    <span class="count" id="cnt"></span>
+  </div>
+  <button class="btn" id="expand" title="Utvid/skjul alle makroseksjoner">Utvid alle</button>
+  <button class="btn" id="theme" title="Bytt lys/mørk">◐</button>
+</header>
+<div class="layout">
+<nav class="side" id="nav" aria-label="Innhold"></nav>
+<main id="content">

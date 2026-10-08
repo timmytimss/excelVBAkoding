@@ -1,0 +1,41 @@
+<section id="oversikt" data-nav="Oversikt|Om denne siden">
+  <h2>Excel VBA Koding — samlet kunnskapsbase</h2>
+  <p class="lead">Dette er den ene siden Håkon viser til når en ny AI-session skal onboardes på alt som er lært om VBA/Excel/PowerShell-koding i dette arbeidet. Siden dekker hele <strong>Excel Macro Installer</strong>-økosystemet: selve installer-programmet og hver enkelt makro som plugger inn i det, pluss en samlet referanse med tekniske fallgruver, testteknikker og Håkons arbeidsstil.</p>
+
+  <div class="callout note">
+    <p><strong>Til en ny AI-session som leser dette først:</strong> les «Prosjektstruktur og arbeidsmåte» og «Fast regel» under, se gjennom oversiktstabellen for hvilke moduler som finnes og deres status, og slå opp i «Kjente fallgruver» før du skriver ny VBA/PowerShell-kode — svært mye av det som står der er dyrt opparbeidet (krasj, datatap-nestenulykker, dager med feilsøking) og gjelder på tvers av alle modulene, ikke bare den ene den ble funnet i.</p>
+  </div>
+
+  <h3>Fast regel: ingenting er «ferdig»</h3>
+  <p>Alt arbeid skjer under ÉTT løpende hovedprosjekt, <strong>Excel Macro Installer (EMI)</strong>. Ingen enkelt-makro skal noensinne omtales eller behandles som «ferdig» eller merkes med en hake — det finnes alltid en neste versjon, et nytt behov eller en rettelse på vei. Statusmerkene på denne siden bruker derfor kun «I drift · vX.Y.Z» (bygget, installert, i aktiv bruk — men fortsatt under utvikling) eller «Under utvikling» (ingen første versjon levert ennå, lav prioritet akkurat nå). Bruk aldri ordet «ferdig» eller en hake (✅) om en modul i tekst du skriver til denne siden.</p>
+
+  <h3>Prosjektstruktur og arbeidsmåte</h3>
+  <p>Alt arbeid samles under én mappe:</p>
+  <pre><code>Claude (nettbasert)\Excel VBA Koding\
+├── Excel VBA Koding.html         ← denne siden (selvforklarende, ingen eksterne avhengigheter)
+├── Excel Macro Installer\        ← EMI: selve installer-programmet + alle makroenes .ps1-kildekode
+│   ├── Excel Macro Installer.exe
+│   ├── Macros\                   ← én .ps1 per makro, dette ER kilden til sannhet for hver modul
+│   ├── Resources\, Data\, Installer\, Guides\
+└── Prosjektfiler\                ← nytt sted for testfiler, midlertidige notater, kladd
+    ├── Testfiler\                ← delt testarbeidsbok(er) med oppdiktede data
+    ├── Ikke-utgitte makroer\     ← kildekode for moduler under utvikling (ikke i EMI\Macros ennå)
+    └── _overlevering\            ← full historisk overlevering fra de nedlagte enkelt-makro-sesjonene (byggelogger, minnefiler, testskript) — oppslagsverk, ikke noe som trenger å leses rutinemessig</code></pre>
+  <p>Praktisk arbeidsflyt for en ny/endret modul: skriv og test i <code>Prosjektfiler\</code> mot en oppdiktet testfil, aldri mot Håkons ekte arbeidsfiler; når koden er stabil, gi den en toppnivå versjonsmarkør (<code>$NavnVersjon = "x.y.z"</code> eller en tilsvarende VBA-konstant som ender på <code>VERSION</code>) og legg/oppdater den i <code>Excel Macro Installer\Macros\</code>; registrer den i <code>Data\macro-metadata.json</code> med beskrivelse og ikon. Se EMI-seksjonen under for full detalj om hva en modul må oppfylle for å plugge inn.</p>
+
+  <h3>Hva finnes her</h3>
+  <div class="grid2" id="modul-oversikt">
+    <div class="card"><h4><a href="#mac-emi">Excel Macro Installer (EMI)</a></h4><p class="tiny">Hovedprosjektet — installerer/oppdaterer/avinstallerer alle modulene fra ett sted.</p></div>
+    <div class="card"><h4><a href="#mac-mailutsender">Mail-utsender</a></h4><p class="tiny">Generell mail-merge mot Outlook-mal, brukt til ekte utsendelser i produksjon.</p></div>
+    <div class="card"><h4><a href="#mac-kontaktsentralen">Kontaktsentralen</a></h4><p class="tiny">Speiler Outlook-kategorier fra en delt postboks inn i Excel-tabellen.</p></div>
+    <div class="card"><h4><a href="#mac-nettskjema">Nettskjema-henter</a></h4><p class="tiny">Henter svar fra UiO Nettskjema via API inn i Excel-tabeller (UPSERT).</p></div>
+    <div class="card"><h4><a href="#mac-makromeny">Makromeny</a></h4><p class="tiny">Felles startmeny for installerte moduler i en arbeidsbok.</p></div>
+    <div class="card"><h4><a href="#mac-kolonnevelger">Kolonnevelger</a></h4><p class="tiny">Tidlig, ikke prioritert nå. Vis/skjul kolonner med lagrede «loadouts».</p></div>
+    <div class="card"><h4><a href="#mac-tabellorganisering">Tabellorganisering</a></h4><p class="tiny">Under utvikling, ikke prioritert nå.</p></div>
+    <div class="card"><h4><a href="#mac-formateringskontroll">Formateringskontroll</a></h4><p class="tiny">Under utvikling, ikke prioritert nå.</p></div>
+  </div>
+  <p class="tiny">Håkon vurderer å slå Kolonnevelger, Tabellorganisering og Formateringskontroll sammen til én makro, «<a href="#cellekontrollen">Cellekontrollen</a>» — kun navnet er bestemt så langt, ikke igangsatt.</p>
+
+  <h3>Bakgrunn for denne siden</h3>
+  <p>Frem til 2026-09-21 var dette arbeidet spredt over seks parallelle Claude-sessions («Macro Maker: …»), én per makro, koordinert av en sentral session («Kjetil») som holdt to separate filer oppdatert (en tekstlogg og et prosjektspesifikt dashbord). 2026-09-21/22 ble alle enkelt-makro-sessionene bedt om å levere en fullstendig, detaljert overlevering av alt de hadde lært — arbeidsflyt, arkitektur, hver fallgruve med symptom/årsak/løsning, designbeslutninger og hvorfor, testmetoder og åpne punkter — fordi sessionene og kildemappene deres (en nå nedlagt prosjektmappe) skulle legges ned. Denne siden er resultatet: alt fra de overleveringene er samlet, omstrukturert vekk fra en prosjektspesifikk ramme og inn i en generell «Excel VBA-koding»-ramme (verktøyene brukes fortsatt i et konkret prosjekt, men det er ikke lenger selve organiseringsprinsippet). De rå overleveringstekstene og kopier av alle minnefiler ligger bevart i <code>Prosjektfiler\_overlevering\</code> som oppslagsverk hvis noe her virker ufullstendig.</p>
+</section>

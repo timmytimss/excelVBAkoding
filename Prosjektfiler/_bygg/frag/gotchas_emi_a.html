@@ -1,0 +1,183 @@
+<div class="gotcha" id="g-emi-com-delt-instans" data-cat="com">
+  <h4>GetActiveObject henter en hvilken som helst kjørende Excel</h4>
+  <dl><dt>Symptom</dt><dd><code>[Runtime.InteropServices.Marshal]::GetActiveObject('Excel.Application')</code> kan hente en HELT ANNEN Excel-instans enn den man mente, f.eks. Håkons egen med hans ekte fil ved siden av. <code>Application.Run("modX.Fn")</code> uten arbeidsboknavn kan treffe samme modulnavn i hans ekte fil og sette VBA-prosjektet hans i break-modus (hendte én gang).</dd>
+  <dt>Årsak</dt><dd>GetActiveObject vet ikke hvilken arbeidsbok som er «riktig» — den henter bare den COM-registrerte, aktive Excel-instansen, uansett hvilken fil som faktisk er åpen der.</dd>
+  <dt>Løsning</dt><dd>Test alltid mot en helt separat <code>New-Object -ComObject Excel.Application</code>; kvalifiser <code>Application.Run</code> alltid mot en bestemt arbeidsbok; enumerér <code>Workbooks</code> og match på eksakt <code>.FullName</code> før noe gjøres; ved uhell: kun lesing, aldri «korriger» (break-modus skader ikke lagret innhold — la Håkon avslutte selv). <code>GetActiveObject</code> brukes bare i Testfil-fasen, og bare etter å ha sjekket at ingen annen Excel kjører (<code>Get-Process EXCEL</code>) og spurt Håkon først.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), gjelder alle EMI-plugin-makroer</p>
+</div>
+
+<div class="gotcha" id="g-emi-com-ustabilitet-sykluser" data-cat="com">
+  <h4>COM-ustabilitet etter mange Add/Remove/Import-sykluser i samme økt</h4>
+  <dl><dt>Symptom</dt><dd>«Kan ikke angi OnAction-egenskapen» rett etter <code>Buttons().Add()</code>; «cannot run macro / macros disabled» på et kall som fungerte nettopp; til slutt tomme egenskaper ved LESING (Caption/OnAction blanke) selv rett etter bekreftet lagring — mens Håkon så i vinduet at alt var fint.</dd>
+  <dt>Årsak</dt><dd>Kumulativ COM-/Excel-tilstand etter dusinvis av Add/Remove/Import-sykluser i én lang økt. Aldri rotårsaksbestemt med sikkerhet.</dd>
+  <dt>Løsning</dt><dd><code>Start-Sleep</code> 500 ms etter import og 300 ms MELLOM hver egenskapstildeling på en ny knapp; stopp live-testing tidlig og stol på statisk gjennomgang + Håkons neste ekte kjøring; be Håkon se på faktisk skjerm i stedet for å polle COM; evt. restart Excel.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-com-smaa-fallgruver" data-cat="com">
+  <h4>Samlepost: fem små COM-fallgruver fra Excel-automasjon</h4>
+  <dl><dt>Symptom</dt><dd>Flere distinkte, små overraskelser: (1) <code>$knapp.Characters.Text</code> finnes ikke på en <code>Button</code>; (2) <code>$comCollection.Count</code> skriver ut teksten «int Count ()» for en sen-bundet VBA-<code>Collection</code>; (3) et Excel-vindu kan være usynlig uten feilmelding; (4) dialoger kan henge en installasjon; (5) <code>MK_E_UNAVAILABLE</code> (0x800401E3) på <code>GetActiveObject</code>.</dd>
+  <dt>Årsak</dt><dd>(1) feil egenskapsnavn for Button-objekter; (2) sen binding eksponerer metoden som streng, ikke tall; (3) <code>Application.Visible</code> kan være <code>$false</code>; (4) <code>DisplayAlerts</code> ikke satt til <code>$false</code>; (5) Excel-vinduet er tapt/lukket når COM-kallet gjøres.</dd>
+  <dt>Løsning</dt><dd>(1) bruk <code>.Caption</code>, ikke <code>.Characters.Text</code>; (2) kall <code>.Count()</code> som metode, ikke egenskap; (3) sjekk/sett <code>Application.Visible</code> eksplisitt; (4) sett <code>DisplayAlerts=$false</code> under installasjon; (5) fang <code>0x800401E3</code> og gi tydelig feilmelding om at Excel er lukket.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-fil-apen-to-ganger" data-cat="com">
+  <h4>Samme fil åpen to ganger (SharePoint/OneDrive-alias)</h4>
+  <dl><dt>Symptom</dt><dd>VBA-editoren viste to komplette VBAProject-trær for det som så ut som samme fil. Installer oppdaterte den ene mens Håkon så på/lagret den andre — opplevdes som «fikser virker ikke».</dd>
+  <dt>Årsak</dt><dd>Samme fil kan være åpnet to ganger via ulike SharePoint/OneDrive-aliaser/stier samtidig, uten at det er synlig hvilken kopi som er hvilken.</dd>
+  <dt>Løsning</dt><dd>Installeren sjekker <code>Workbooks</code> for navn som er eksakt lik filnavnet ELLER filnavnet + <code>:2</code>/<code>:3</code> (NB: mønsteret må inkludere hele filnavnet med <code>.xlsm</code>, kolon og tall — et feil regex-mønster matcher stille ingenting), avbryter med tydelig melding, og advarer hvis flere <code>EXCEL.exe</code>-prosesser kjører. En PC-omstart løste den opprinnelige episoden.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-slett-ikke-delte-ui-generisk" data-cat="excel">
+  <h4>Aldri slett/endre delte UI-elementer med et generelt filter</h4>
+  <dl><dt>Symptom</dt><dd>En «rydd bort knapper uten OnAction»-opprydding slettet en annen makros (Kolonnevelgers) knapp, som tilfeldigvis stod blank etter COM-ustabilitet, på samme ark.</dd>
+  <dt>Årsak</dt><dd>Et generelt filter («fjern alt som ser tomt/ubrukt ut») rammer også elementer som eies av en ANNEN installert makro på samme ark.</dd>
+  <dt>Løsning</dt><dd>Match KUN egne eksakte <code>OnAction</code>-navn (og kvalifisert <code>*!Navn</code>). Aldri generisk «rydd opp»-filter på delte ark. Ble gjenopprettet ved å lage knappen på nytt via COM.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4); samme regel gjentatt for Kontaktsentralen og Makromeny</p>
+</div>
+
+<div class="gotcha" id="g-emi-hengende-modal-dialog" data-cat="com">
+  <h4>Hengende COM-kall = usynlig modal dialog</h4>
+  <dl><dt>Symptom</dt><dd><code>Application.Run</code>/<code>OnTime</code> returnerer ikke; prosessen viser «Responding» i Oppgavebehandling likevel.</dd>
+  <dt>Årsak</dt><dd>En skjult <code>MsgBox</code> eller en VBE-kompileringsfeil-dialog («Microsoft Visual Basic for Applications») venter på klikk, usynlig for automasjonen. Typisk kryptisk HRESULT: 0x800A0009, eller 0x800AC472 (VBA_E_IGNORE = «Excel opptatt»).</dd>
+  <dt>Løsning</dt><dd><code>EnumWindows</code> for Excel-PID -&gt; les tekst med <code>System.Windows.Automation</code> (Pane «Compile error: …») -&gt; lukk med <code>WM_CLOSE</code> -&gt; <code>Stop-Process</code> hvis den blir stående. Sjekk ALLTID etter installasjon at et skjema faktisk åpner uten dialog (åpne et skjema via <code>OnTime</code> — VBA kompilerer først ved kjøring, ikke ved import).</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-run-ontime-kun-standardmodul" data-cat="com">
+  <h4>Application.Run/OnTime kan ikke kalle «Skjema.Metode»</h4>
+  <dl><dt>Symptom</dt><dd>«Kan ikke kjøre makroen …» ved forsøk på ekstern kall til en metode på et UserForm.</dd>
+  <dt>Årsak</dt><dd>Ekstern <code>Application.Run</code>/<code>OnTime</code> støtter bare rene navn på Sub/Function i en STANDARDMODUL, ikke kvalifiserte kall inn i et skjemas egen kodemodul.</dd>
+  <dt>Løsning</dt><dd>Midlertidige bro-funksjoner i en standardmodul (f.eks. <code>Test_LesX()</code> som kaller skjemaet, <code>Test_Aapne()</code> = <code>frmX.Show</code>). Et modalt <code>.Show</code> blokkerer IKKE andre eksterne COM-kall til samme Excel (meldingspumpen kjører fortsatt); <code>OnTime</code> returnerer umiddelbart. Fjern alle test-broer før endelig innsending, i hver runde, sammen med versjonsbump.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-filer-i-bruk" data-cat="process">
+  <h4>Filer/prosesser i bruk (fil-lås)</h4>
+  <dl><dt>Symptom</dt><dd>Installasjon eller kompilering av EMI konflikter fordi Testfil.xlsm eller <code>Excel Macro Installer.exe</code> allerede er åpen/kjørende hos Håkon.</dd>
+  <dt>Årsak</dt><dd>Håkon har ofte filen/programmet åpent selv for å teste, eller EMI-exe-en er startet fra en tidligere økt.</dd>
+  <dt>Løsning</dt><dd>Spør ALLTID først («Kan jeg lukke …?»). Ikke drep Excel/EMI man ikke selv har startet uten å spørre. Sjekk <code>Get-Process "Excel Macro Installer"</code> før hver kompilering av EMI (se byggeprosedyren).</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-bump-ved-lik-versjon" data-cat="installer">
+  <h4>Installer hopper stille over ved LIK versjon</h4>
+  <dl><dt>Symptom</dt><dd>Man fikser en bug, ber Håkon kjøre makroen på nytt — ingenting skjer, ingen feilmelding.</dd>
+  <dt>Årsak</dt><dd>Versjonssjekken (installert versjon == kildens versjon og ikke <code>-Force</code>) kortslutter og hopper over hele installasjonen.</dd>
+  <dt>Løsning</dt><dd>Bump versjonen for HVER endring i det installeren genererer, også «bare» BOM-/leveringsfikser. Gjelder ALLE makro-.ps1-ene i EMI. Konkret hendelse: EMI-kopien av Mail-utsender fikk kodeendringer uten versjonsbump, og slo derfor ikke inn på filer som allerede hadde 0.18.9 før bump eller <code>-Force</code>.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4); samme mønster som beskrevet i «excel-vba-installer-pattern»-minnefilen</p>
+</div>
+
+<div class="gotcha" id="g-emi-p1-bom-krav" data-cat="encoding">
+  <h4>.ps1 med æøå MÅ være UTF-8 MED BOM</h4>
+  <dl><dt>Symptom</dt><dd>«MÃ¥lform» og lignende — tekst i VBA/MsgBox/kolonnenavn blir garblet.</dd>
+  <dt>Årsak</dt><dd>Windows PowerShell 5.1 auto-detekterer kun UTF-8 når filen har en byte-order-mark (BOM, EF BB BF). Uten BOM tolkes filen som ANSI. Dette skjer i PowerShells EGEN parsing, FØR skriptet i det hele tatt kjører — også inni heredocs, så garblingen smitter over i eksportert VBA-kode.</dd>
+  <dt>Løsning</dt><dd>Write-verktøyet skriver UTEN BOM — legg alltid på BOM etterpå: <code>[IO.File]::WriteAllText($p, [IO.File]::ReadAllText($p,[Text.Encoding]::UTF8), (New-Object Text.UTF8Encoding($true)))</code>. Sjekk de første 3 byte etter hver omskriving. Alle .ps1-ene i familien har en Sjekk-UtfPS1BOM-advarsel innebygd.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p2-vba-import-encoding" data-cat="encoding">
+  <h4>VBA .bas/.frm-import trenger ANSI, ikke UTF-8</h4>
+  <dl><dt>Symptom</dt><dd>æøå ødelagt etter <code>VBComponents.Import()</code>, selv om kildefilen var korrekt.</dd>
+  <dt>Årsak</dt><dd><code>Import</code> forventer system-ANSI-kodepage (samme som Excels egen eksport av .bas-filer), ikke UTF-8.</dd>
+  <dt>Løsning</dt><dd>Skriv temp-filen som skal importeres UTEN eksplisitt <code>-Encoding</code> på <code>Set-Content</code> — <code>-Encoding utf8</code> her ødelegger æøå ved import, selv om UTF-8 normalt er riktig valg for filer andre verktøy skal lese.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p3-tom-liste-unrolles" data-cat="powershell">
+  <h4>return av tom/ett-elements List[object] blir $null eller løst opp</h4>
+  <dl><dt>Symptom</dt><dd>«You cannot call a method on a null-valued expression» første gang et register er tomt.</dd>
+  <dt>Årsak</dt><dd><code>return $liste</code> av en tom eller ett-elements <code>List[object]</code> sender verdien inn på PowerShell-pipelinen, som enumererer enhver <code>IEnumerable</code> — en tom liste gir null objekter ut (<code>$null</code>), en ett-elements liste gir det bare elementet (ikke listen).</dd>
+  <dt>Løsning</dt><dd><code>return ,$liste</code> (ledende komma) — pakker listen i et 1-elements array først, så pipeline-enumereringen bare pakker ut ETT nivå og den ekte listen kommer helt igjennom uansett innhold. Gjelder <code>Hent-Makroliste</code> og <code>Les-InstallertRegister</code> i EMI-kilden.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), utdypet i minnefilen excel-macro-installer-launcher</p>
+</div>
+
+<div class="gotcha" id="g-emi-p4-convertto-json-list" data-cat="powershell">
+  <h4>ConvertTo-Json på wrappet List[object] feiler</h4>
+  <dl><dt>Symptom</dt><dd>«Argumenttypene samsvarer ikke» fra <code>ConvertTo-Json -InputObject @($aGenericList)</code>.</dd>
+  <dt>Årsak</dt><dd>Kjent PowerShell-engine-binder-bug (<code>PSToObjectArrayBinder</code>) — det vanlige rådet «pakk i <code>@()</code> for å tvinge JSON-array selv ved 0/1 elementer» virker for vanlige arrays, men IKKE for en ekte <code>System.Collections.Generic.List[object]</code>.</dd>
+  <dt>Løsning</dt><dd>Kall <code>.ToArray()</code> på listen og send DET direkte til <code>ConvertTo-Json -InputObject</code> (ikke pakk med <code>@()</code> i tillegg).</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), utdypet i minnefilen excel-macro-installer-launcher</p>
+</div>
+
+<div class="gotcha" id="g-emi-p5-range-slicing-byte" data-cat="powershell">
+  <h4>Range-slicing gir Object[], ikke Byte[]</h4>
+  <dl><dt>Symptom</dt><dd><code>BinaryWriter.Write</code> skriver bare 1 byte i stedet for hele arrayet, helt uten feilmelding.</dd>
+  <dt>Årsak</dt><dd><code>$bytes[14..($n-1)]</code> gir <code>System.Object[]</code>, ikke <code>System.Byte[]</code>. PowerShells metode-overload-binder velger stille en annen, feil overload av <code>.Write()</code>.</dd>
+  <dt>Løsning</dt><dd>Bygg byte-arrayer for binærfil-arbeid via <code>New-Object byte[] n</code> + <code>[Array]::Copy</code>, aldri via range-slicing, når resultatet må forbli en ekte, strengt typet <code>byte[]</code>.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), ikon-byggingen i EMI</p>
+</div>
+
+<div class="gotcha" id="g-emi-p6-int-avrunder-ikke-trunkerer" data-cat="powershell">
+  <h4>[int](a/b) avrunder, trunkerer ikke</h4>
+  <dl><dt>Symptom</dt><dd><code>IndexOutOfRange</code> nøyaktig ved radgrenser i binær bildedata-behandling (f.eks. x=255 i et 256-bredt bilde).</dd>
+  <dt>Årsak</dt><dd>PowerShells <code>/</code> gir alltid en double, og <code>[int](31.875)</code> gir 32, ikke 31 — <code>[int]()</code>-cast AVRUNDER til nærmeste, det trunkerer ikke.</dd>
+  <dt>Løsning</dt><dd>Bruk <code>-shr 3</code> for divisjon med 8 (eller generelt potenser av 2), eller <code>[Math]::Floor(...)</code> ellers.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), ikon-byggingen i EMI</p>
+</div>
+
+<div class="gotcha" id="g-emi-p7-variabelnavn-case-krasj" data-cat="powershell">
+  <h4>Variabelnavn er case-insensitive og arver parameterens type</h4>
+  <dl><dt>Symptom</dt><dd>Et objekt ble stille tvangskonvertert til strengen «System.Drawing.Drawing2D.GraphicsPath»; en søppelfil med akkurat det navnet havnet i prosjektmappa.</dd>
+  <dt>Årsak</dt><dd><code>param([string]$Path)</code> + senere <code>$path = New-Object GraphicsPath</code> (annen store/små bokstaver) er SAMME variabel i PowerShell — typebegrensningen fra parameteren følger med og tvinger objektet til streng.</dd>
+  <dt>Løsning</dt><dd>Gjenbruk aldri en typet parameters navn (uansett store/små bokstaver) til noe annet i samme funksjon — gi det nye formålet et eget navn.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), ikon-byggingen i EMI</p>
+</div>
+
+<div class="gotcha" id="g-emi-p8-pathgradientbrush-overload" data-cat="powershell">
+  <h4>New-Object …PathGradientBrush(@(punkter)) finner ikke overload</h4>
+  <dl><dt>Symptom</dt><dd>«Cannot find an overload … argument count 4».</dd>
+  <dt>Årsak</dt><dd><code>@(...)</code> gir <code>Object[]</code>, men konstruktøren krever en ekte <code>Point[]</code>.</dd>
+  <dt>Løsning</dt><dd>Bygg arrayet typet, <code>[System.Drawing.Point[]]@(…)</code>, og send det inn wrappet i en unær komma-operator, <code>(,$arr)</code>, så PowerShell ikke ruller det ut igjen til enkeltargumenter.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4), ikon-byggingen i EMI/Bygg-Ikoner.ps1</p>
+</div>
+
+<div class="gotcha" id="g-emi-p9-stille-catch-datatap" data-cat="powershell">
+  <h4>Stille catch{} mellom les og skriv-tilbake = latent datatap</h4>
+  <dl><dt>Symptom</dt><dd>En hel registerfil (EMIs installed-files.json) ble tømt etter en helt vanlig «Oppdater»-handling, ikke konsekvent reproduserbart.</dd>
+  <dt>Årsak</dt><dd>En <code>try { Get-Content/ConvertFrom-Json } catch { }</code> svelger stille enhver lese-/parsefeil og returnerer en TOM liste ved feil — fint for en visning, men farlig når samme lesing brukes som «les»-halvparten av en les-endre-skriv-oppdatering. OneDrive-synk kan kortvarig låse filen rett etter EMIs egen forrige skriving, akkurat det tidsvinduet en skriv-så-les-tilbake rammer.</dd>
+  <dt>Løsning</dt><dd>Retry lesing/parsing opptil 5 ganger × 150 ms; sett et flagg (<code>$script:sisteLesingOk</code>) til <code>$false</code> hvis alle forsøk feiler; skrivefunksjonen NEKTER å skrive noe i det hele tatt hvis forrige lesing ikke ble verifisert OK — installasjonen har uansett allerede skjedd i en annen prosess, så å hoppe over logg-oppdateringen stille er et fullt akseptabelt fallback sammenlignet med å ødelegge hele registeret. Sjekk alle andre stille <code>catch {}</code> i samme mønster (les-så-skriv-tilbake, spesielt i OneDrive-mapper).</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4); fikset i EMI v2.1.1.0, se versjonshistorikk</p>
+</div>
+
+<div class="gotcha" id="g-emi-p10-start-process-mellomrom" data-cat="powershell">
+  <h4>Start-Process -ArgumentList og stier med mellomrom</h4>
+  <dl><dt>Symptom</dt><dd>Filsti med mellomrom (typisk i OneDrive-stier) tolkes som flere separate argumenter.</dd>
+  <dt>Årsak</dt><dd><code>-ArgumentList</code> splitter på mellomrom med mindre hvert argument selv er anførselstegn-omsluttet.</dd>
+  <dt>Løsning</dt><dd>Pakk hver sti i egne anførselstegn: <code>('"' + $sti + '"')</code>. Brukes gjennomgående i EMIs <code>Start-MakroMedFil</code> og <code>Fjern-MakroFraFil</code>.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p11-addtype-ny-prosess" data-cat="powershell">
+  <h4>Hvert verktøykall er en ny PowerShell-prosess</h4>
+  <dl><dt>Symptom</dt><dd>Klasser definert med <code>Add-Type</code> i ett verktøykall er borte i neste.</dd>
+  <dt>Årsak</dt><dd>Hvert kall til et PowerShell-verktøy (f.eks. i en agent-økt) starter en ny prosess — ingenting i minnet overlever mellom kall.</dd>
+  <dt>Løsning</dt><dd>Definer <code>Add-Type</code>-klasser i SAMME kall som de brukes.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p12-heredoc-kommentarer" data-cat="powershell">
+  <h4>VBA-stil kommentarer og heredoc-fallgruver i PowerShell</h4>
+  <dl><dt>Symptom</dt><dd>«string missing terminator» ved bruk av VBA-stil <code>'</code>-kommentarer inni PowerShell-kode.</dd>
+  <dt>Årsak</dt><dd>Et ubalansert enkelt anførselstegn i en PowerShell-kommentar bryter parsingen.</dd>
+  <dt>Løsning</dt><dd>Aldri VBA-stil <code>'</code>-kommentarer i ren PowerShell-kode. For heredocs: <code>@'…'@</code> (single-quoted) skal ha lukkende <code>'@</code> i kolonne 0, og brukes for VBA-kildekode fordi <code>@"…"@</code> (double-quoted) ekspanderer <code>$</code>-tegn.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p13-norske-feilmeldinger" data-cat="powershell">
+  <h4>Norsk Windows gir lokaliserte feilmeldinger</h4>
+  <dl><dt>Symptom</dt><dd>Regex-matching mot engelsk feiltekst finner ingenting.</dd>
+  <dt>Årsak</dt><dd>Feilmeldinger på Håkons maskin er norske («Kan ikke kjøre makroen …», «Verdien kan ikke være null»), ikke engelske.</dd>
+  <dt>Løsning</dt><dd>Match aldri på engelsk feiltekst — bruk de faktiske norske meldingene, eller match på HRESULT-koder i stedet for tekst der mulig.</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
+
+<div class="gotcha" id="g-emi-p14-lokal-verifisering" data-cat="testing">
+  <h4>Lokal verifisering før hver installasjon/kompilering</h4>
+  <dl><dt>Symptom</dt><dd>Syntaksfeil eller BOM-tap oppdages først når Håkon kjører installeren.</dd>
+  <dt>Årsak</dt><dd>Ingen automatisk sjekk kjøres før filen leveres.</dd>
+  <dt>Løsning</dt><dd>Kjør alltid BOM-sjekk (byte 1–3 = EF BB BF) + <code>[ScriptBlock]::Create((Get-Content -Raw -Encoding UTF8 &lt;kilde&gt;))</code> før hver installasjon/kompilering. Dette validerer KUN PowerShell-laget — VBA-syntaksfeil avsløres først når Excel selv kompilerer VBA-koden (se hengende-modal-gotchaen over).</dd></dl>
+  <p class="src">Kilde: Mail-utsender-sessionens overlevering (del 4)</p>
+</div>
