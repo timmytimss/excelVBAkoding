@@ -11,7 +11,7 @@
 # Laget 2026-10-08 (kontoflytting fase 7). Se Excel VBA Koding.html (EMI -> Oppdatering fra GitHub).
 param(
     [Parameter(Mandatory = $true)][string]$Endringer,
-    [string]$Repo = (Join-Path $env:USERPROFILE "Documents\excelVBAkoding-git"),
+    [string]$Repo = (Join-Path $env:USERPROFILE "Documents\excelVBAkoding"),
     [string]$Versjon
 )
 $ErrorActionPreference = 'Stop'

@@ -31,7 +31,27 @@
     <li><strong>Filer er det delte språket, ikke samtalehistorikk.</strong> De to sessionene deler ingen samtale — alt de skal koordinere om må enten stå i en fil begge leser (kode, denne HTML-siden, en statusnotat i <a href="#prosjektfiler-orientering">Prosjektfiler</a>), eller sendes eksplisitt som en melding mellom sessionene (Claude Code støtter cross-session-meldinger mellom navngitte sessioner på samme maskin/konto — akkurat slik «Kjetil» koordinerte de seks nedlagte makro-sesjonene under denne omstruktureringen).</li>
     <li><strong>Typisk flyt for en kodeendring:</strong> sky-sessionen (eller hvem som helst) skriver/endrer VBA/PowerShell-kildekoden og oppdaterer dokumentasjonen → melding til den lokale sessionen: «test denne endringen mot Testfiler, gi beskjed om resultat» → lokal session installerer, kjører kompileringssjekk, tester, og melder tilbake pass/fail med konkret feilbeskrivelse → sky-sessionen retter ved behov. Motsatt vei fungerer like godt: lokal session finner en bug ved ekte klikk-testing, sender en presis feilbeskrivelse til sky-sessionen for rotårsaksanalyse og skriving av en ny fallgruve-oppføring mens lokal session går videre med annet.</li>
     <li><strong>Før noen starter noe stort:</strong> sjekk om den andre sessionen allerede jobber med det samme (spør Håkon, eller send en rask melding til den andre sessionen om hva som er i gang), særlig siden begge kan ha tilgang til samme filer samtidig og usynkroniserte endringer på samme fil er den vanligste kilden til bortkastet arbeid.</li>
+    <li><strong>Bekreftet 2026-09-22: sesjonsmeldinger når IKKE frem til en skybasert «environment»-session fra en lokal session</strong> (forsøkt direkte, avvist med «not reachable») — mens de fungerer fint mellom to lokale sessioner på samme maskin. Dette er derfor ikke et generelt reserveløsning-poeng lenger for en sky-session, men den ENESTE kanalen: en fil i selve git-repoet, <code>KOORDINERING.md</code> i prosjektroten, som hver session leser ved <code>git pull</code> og skriver en datert oppføring i før <code>git push</code>. En lokal session som skal koordinere med en sky-session MÅ bruke denne filen; sesjonsmeldinger er kun pålitelige mellom sessioner som deler maskin.</li>
   </ul>
+
+  <h3 id="arbeidsmodell-tre-roller">Et konkret forslag: tre roller i stedet for to (eksempel: Kjetil, Nils, Eva)</h3>
+  <p>I praksis viste det seg at «lokal session» rommer to ganske ulike jobber: å HOLDE OVERSIKT (arkitektur, hva som er besluttet, kontaktpunkt for Håkon) og å SKRIVE KODE (implementere, feilsøke, teste live). Gjør samme session begge deler, blir det fort uklart om den i et gitt øyeblikk skal prioritere «forstå helheten» eller «bli ferdig med denne funksjonen». Et konkret forslag (2026-09-22, ikke en fasit) er derfor å dele opp i tre roller, illustrert her med eksempelnavn:</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>Koordinator — «Kjetil» (lokal)</h4>
+      <p>Skriver ikke kode. Holder HTML-kunnskapsbasen sammenhengende, har sanntids innsyn i den faktiske OneDrive-mappa (ingen synk-forsinkelse, siden den er lokal), og er Håkons faste kontaktpunkt for alt som ikke opplagt hører til de to andre rollene. Tar en session seg selv i å debugge VBA, er det et tegn på at rollen har glidd over i Koder-rollen og bør rendyrkes igjen.</p>
+    </div>
+    <div class="card">
+      <h4>Koder — «Nils» (lokal)</h4>
+      <p>Skriver og tester all VBA/PowerShell-kode. Sammen med Koordinator den eneste som kan gjøre ekte COM-automatisering/klikk-testing, siden begge kjører på Håkons egen maskin. Tester mot de varige filene i <a href="#arbeidsprosess-testfiler">Testfiler</a>, ikke kastefiler.</p>
+    </div>
+    <div class="card">
+      <h4>Tekniker — «Eva» (sky)</h4>
+      <p>Eier hele git/GitHub-flyten og er tilgjengelig for Håkon fra hvilken som helst maskin med Claude. <strong>Kan ikke</strong> skrive direkte til OneDrive-mappa uansett hva den blir bedt om — strukturelt umulig, se <a href="#arbeidsmodell-git">Git/GitHub-avsnittet</a> over. Alt den produserer må hentes ned og skrives inn i OneDrive-mappa av en av de to lokale sessionene.</p>
+    </div>
+  </div>
+  <p>Begrunnelsen for akkurat denne inndelingen, ikke en annen: den følger hvilken tilgang hver session FAKTISK har, ikke en vilkårlig arbeidsfordeling. To sessioner er lokale fordi personvernregelen og COM-tilgangen uansett krever det for koding/testing; den tredje er i sky nettopp for portabiliteten Håkon ønsket (tilgjengelig uansett maskin) — men den portabiliteten har en pris (ingen direkte skrivetilgang til OneDrive), så den rollen er bevisst smalnet ned til det den faktisk kan gjøre selvstendig (git-teknikk), fremfor å late som den også kan være et generelt kontaktpunkt for alt.</p>
+  <div class="callout note">Vaktpunkt for om denne tredelingen fortsatt gir mening: hvis Koordinator og Koder over tid gjør nesten identisk arbeid, bør de to slås sammen til én lokal session — da er det egentlig bare «lokal» og «sky (Tekniker)» som trengs, jf. resonnementet i starten av dette avsnittet.</div>
 
   <h3 id="arbeidsmodell-usage">Å bruke Håkons tilgjengelige ressurser («usage») fornuftig</h3>
   <ul>
@@ -54,7 +74,7 @@
   <div class="callout note">Praktisk konsekvens: en session som bare skal fikse én liten ting i én makro, trenger kanskje aldri å lese mer enn innledningen + ett enkelt søketreff — ikke syv-åtte hundre kilobyte tekst om fem andre makroer den ikke rører.</div>
 
   <h3 id="prosjektfiler-orientering">Bruk av <code>Prosjektfiler</code>-mappen</h3>
-  <p>Full sti: <code>C:\Users\haaklun\OneDrive - Universitetet i Oslo\Dokumenter (UiO OD)\Claude (nettbasert)\Excel VBA Koding\Prosjektfiler</code>. Dette er stedet for alt arbeid som ikke er selve den ferdige HTML-siden eller EMI-kildekoden. Undermapper og deres formål:</p>
+  <p>Full sti: <code>C:\Users\haaklun\Documents\excelVBAkoding\Prosjektfiler</code>. Dette er stedet for alt arbeid som ikke er selve den ferdige HTML-siden eller EMI-kildekoden. Undermapper og deres formål:</p>
   <table>
     <thead><tr><th>Mappe</th><th>Formål</th><th>Hvem skriver hit</th></tr></thead>
     <tbody>

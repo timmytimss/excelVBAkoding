@@ -51,7 +51,7 @@ $top = [System.Drawing.Color]::FromArgb(254, 226, 226)
 $bottom = [System.Drawing.Color]::FromArgb(239, 68, 68)
 
 $bmp128 = New-RoundedGradientBitmap -Size 128 -TopColor $top -BottomColor $bottom
-$outIco = 'C:\Users\haaklun\OneDrive - Universitetet i Oslo\Dokumenter (UiO OD)\Claude (nettbasert)\Excel VBA Koding\Excel Macro Installer\Resources\icon-statistikkern.ico'
+$outIco = 'C:\Users\haaklun\Documents\excelVBAkoding\Excel Macro Installer\Resources\icon-statistikkern.ico'
 Write-RawIco -Bmp $bmp128 -OutPath $outIco
 $bmp128.Dispose()
 Write-Output "Skrev icon-statistikkern.ico (raw DIB-metode)"
