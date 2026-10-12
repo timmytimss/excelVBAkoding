@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.12.10",
+    "versjon":  "2026.10.12.11",
     "dato":  "2026-10-12",
     "emi":  "2.9.5.0",
-    "endringer":  "Nye makroversjoner hentes automatisk ved oppstart; «Oppdater EMI» vises bare når selve programmet er nytt."
+    "endringer":  "Makromeny 2.8.2: bredere fliser, så hele navnet vises."
 }

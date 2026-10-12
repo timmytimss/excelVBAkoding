@@ -49,7 +49,7 @@ $ae = [char]0x00E6
 $moduleCodeRaw = @'
 Option Explicit
 
-Public Const MAKROMENY_VERSION As String = "2.8.1"
+Public Const MAKROMENY_VERSION As String = "2.8.2"
 ' Navnet paa en evt. gammel "baandknapp"-verktoylinje fra en tidligere
 ' versjon (2.4.0-2.4.2, siden fjernet igjen - Haakons eksplisitte onske
 ' 2026-09-23: han provde funksjonen, likte ikke resultatet). Konstanten
@@ -567,7 +567,8 @@ Option Explicit
 
 Private mTiles As Collection
 
-Private Const TILE_W As Single = 150
+' Bredere fliser (2.8.2): med ikonet til venstre ble lange navn klippet.
+Private Const TILE_W As Single = 190
 ' Lave fliser med ikonet til venstre for navnet (2.8.1): med seks makroer
 ' fikk ikke de hoye flisene plass uten rullefelt.
 Private Const TILE_H As Single = 52
@@ -684,6 +685,13 @@ Private Sub ByggMeny()
 End Sub
 
 Private Sub PosisjonerBunnKontroller()
+    ' Bredden folger flisene (TILE_W), sa vinduet ikke ma justeres for hand
+    ' i designeren nar flisstorrelsen endres.
+    frameMeny.Width = KOLONNER * TILE_W + (KOLONNER - 1) * TILE_GAP + 4
+    Me.Width = (Me.Width - Me.InsideWidth) + frameMeny.Left * 2 + frameMeny.Width
+    lblStatus.Width = frameMeny.Width
+    cmdInfo.Left = frameMeny.Left + (frameMeny.Width - cmdInfo.Width) / 2
+
     Dim topp As Single
     topp = frameMeny.Top + frameMeny.Height + 10
     lblStatus.Top = topp
