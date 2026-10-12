@@ -50,6 +50,4 @@ Remove-Item $kl -Recurse -Force
 
 ## Ventende jobb
 
-- **EMI 2.9.1.0** (kilde endret 2026-10-12 i sky-økt): oransje oppdateringsknapp + statusteksten dekker ikke
-  lenger knappen. `-Endringer "Oppdateringsknappen er oransje og dekkes ikke lenger av statusteksten."`
-  Selve knappen kan først ses ved NESTE publisering (den vises bare når en nyere versjon finnes).
+Ingen. (Sist: EMI 2.9.1.0, publisert 2026-10-12 som pakke `2026.10.12.2`.)
