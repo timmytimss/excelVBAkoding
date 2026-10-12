@@ -1,4 +1,7 @@
-# Kompiler og publiser EMI (lokal økt på Håkons PC)
+# Kompiler og publiser EMI – manuell reserve
+
+**Normalt skjer dette automatisk:** `.github/workflows/bygg-emi.yml` bygger og publiserer exe-en på GitHub Actions når
+EMI-kilden endres på `main` (fra 2026-10-12). Bruk stegene under bare hvis Actions-jobben ikke virker.
 
 Brukes når `Excel Macro Installer/Installer/Excel Macro Installer.ps1` er endret og `.exe`-en må kompileres på
 nytt. Det kan bare gjøres på Windows (ps2exe). Sky-økter endrer kilden og bumper `$LauncherVersion`; en lokal økt
@@ -50,5 +53,4 @@ Remove-Item $kl -Recurse -Force
 
 ## Ventende jobb
 
-- **EMI 2.9.3.0** (kilde endret 2026-10-12): oppdateringsknappen viser den nye versjonen i en mindre linje,
-  toppteksten er alltid grå med gjeldende versjon. `-Endringer "Oppdateringsknappen viser den nye versjonen; versjonsnummeret oppe til høyre er alltid grått."`
+Ingen. EMI 2.9.3.0 bygges av første kjøring av Actions-jobben (2026-10-12).
