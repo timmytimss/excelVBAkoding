@@ -1653,12 +1653,12 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
     </tbody>
   </table>
 </section>
-<section class="macro" id="mac-katalogmekker" data-nav="Under utvikling|Katalogmekker" data-title="Katalogmekker" data-status="Under utvikling · v0.1.0 (prototype, ikke testet i Excel)">
+<section class="macro" id="mac-katalogmekker" data-nav="Makroer i drift|Katalogmekker" data-title="Katalogmekker" data-status="I drift · v0.1.0">
   <h2>Katalogmekker</h2>
   <p class="lead">Lager en kontaktfil (<code>.vcf</code>, vCard 3.0) fra en tabell, til import i Google Kontakter (contacts.google.com &gt; Importer) eller direkte på en Android-telefon. Telefonnummeret er nøkkelen: det renskrives til norsk standard, og navnet settes sammen fra valgfrie kolonner.</p>
   <dl class="facts">
     <dt>Versjon</dt>
-    <dd>0.1.0 (2026-10-12, sky-økt). Prototype skrevet etter Håkons spesifikasjon; <strong>ikke kompilert eller kjørt i Excel ennå</strong>. Konstanten <code>KATALOGMEKKER_VERSION</code> i <code>modKatalogmekker</code>.</dd>
+    <dd>0.1.0 (2026-10-12, sky-økt). Skrevet etter Håkons spesifikasjon. Testet av Håkon samme dag: en ekte import av 292 kontakter til Google Kontakter ga riktige navn, numre og etikett. Konstanten <code>KATALOGMEKKER_VERSION</code> i <code>modKatalogmekker</code>.</dd>
     <dt>Kilde</dt>
     <dd><code>Excel Macro Installer\Macros\Katalogmekker.ps1</code> (UTF-8 med BOM, LF), samme installer-mønster som Statistikkern.</dd>
     <dt>VBA-komponenter</dt>
