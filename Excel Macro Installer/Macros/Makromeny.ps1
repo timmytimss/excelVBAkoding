@@ -49,7 +49,7 @@ $ae = [char]0x00E6
 $moduleCodeRaw = @'
 Option Explicit
 
-Public Const MAKROMENY_VERSION As String = "2.8.2"
+Public Const MAKROMENY_VERSION As String = "2.8.3"
 ' Navnet paa en evt. gammel "baandknapp"-verktoylinje fra en tidligere
 ' versjon (2.4.0-2.4.2, siden fjernet igjen - Haakons eksplisitte onske
 ' 2026-09-23: han provde funksjonen, likte ikke resultatet). Konstanten
@@ -641,11 +641,14 @@ Private Sub ByggMeny()
             .Top = r * (TILE_H + TILE_GAP)
             .Width = TILE_W
             .Height = TILE_H
-            .Caption = info(1)
-            .BackColor = info(3)
-            .ForeColor = RGB(35, 38, 46)
+            ' Skrift FOR tekst, og et ekstra mellomrom bak: med ikonet til venstre
+            ' maler MSForms tekstbredden med den gamle (ikke-fete) skriften, og
+            ' siste bokstav ble klippet ("Mail-utsende") uansett flisbredde (2.8.3).
             .Font.Size = 10
             .Font.Bold = True
+            .Caption = info(1) & "  "
+            .BackColor = info(3)
+            .ForeColor = RGB(35, 38, 46)
             .ControlTipText = info(2)
         End With
 
