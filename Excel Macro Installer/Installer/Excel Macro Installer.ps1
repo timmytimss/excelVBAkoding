@@ -56,7 +56,7 @@ public class DpiFix {
 # gang programmet rekompileres - selvoppdaterings-sjekken lenger nede
 # sammenligner disse to (bakt-inn-versjon vs. fersk lest fra .exe-fila pa
 # disk) for a varsle om en nyere versjon ligger klar.
-$LauncherVersion = "2.9.0.0"
+$LauncherVersion = "2.9.1.0"
 
 # Kjort som kompilert .exe (ps2exe, GUI-undersystem - ingen konsoll/
 # terminal-vindu i det hele tatt, uansett Windows sine Terminal-
@@ -627,6 +627,15 @@ function Ny-Knapp {
             $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(218, 224, 252)
             $b.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
         }
+        "oransje" {
+            # Samme fargefamilie som "ny versjon tilgjengelig"-toppteksten
+            # (FargeOransjePrikk), litt morkere sa hvit tekst er lesbar.
+            $b.BackColor = [System.Drawing.Color]::FromArgb(217, 119, 6)
+            $b.ForeColor = [System.Drawing.Color]::White
+            $b.FlatAppearance.BorderSize = 0
+            $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(180, 83, 9)
+            $b.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        }
         "lenke" {
             $b.BackColor = [System.Drawing.Color]::White
             $b.ForeColor = $script:FargeLenkeRod
@@ -641,7 +650,7 @@ function Ny-Knapp {
         $maalt = [System.Windows.Forms.TextRenderer]::MeasureText($Tekst, $b.Font)
         $b.Width = $maalt.Width + $(if ($Stil -eq "lenke") { 16 } else { 32 })
     }
-    if ($Stil -eq "primaer" -or $Stil -eq "gronn") { Set-RundedeHjorner -Ctrl $b -Radius 6 }
+    if ($Stil -eq "primaer" -or $Stil -eq "gronn" -or $Stil -eq "oransje") { Set-RundedeHjorner -Ctrl $b -Radius 6 }
     return $b
 }
 
@@ -1086,9 +1095,12 @@ try {
 # runspacet). Svarer ikke GitHub innen 8 s (ingen nett, proxy e.l.) skjer
 # ingenting - EMI fungerer som for. Knappen vises kun nar en nyere pakke finnes.
 $script:nyPakke = $null
-$cmdOppdater = Ny-Knapp -Tekst "Oppdater EMI" -Stil "primaer" -Bredde 150 -Hoyde 34
-$cmdOppdater.Left = $cmdStartNytt.Left - 10 - 150; $cmdOppdater.Top = $form.ClientSize.Height - $bottomH + 13
+$cmdOppdater = Ny-Knapp -Tekst "Ny versjon – oppdater EMI" -Stil "oransje" -Hoyde 34
+$cmdOppdater.Left = $cmdStartNytt.Left - 10 - $cmdOppdater.Width; $cmdOppdater.Top = $form.ClientSize.Height - $bottomH + 13
 $cmdOppdater.Visible = $false
+# Statusteksten nederst skal slutte FOR knappene - den har hvit bakgrunn og
+# la seg ellers over venstre del av oppdateringsknappen (2.9.0.0).
+$lblStatusBunn.Width = [Math]::Max(100, $cmdOppdater.Left - 12 - $lblStatusBunn.Left)
 
 function Ny-HttpKlient {
     Add-Type -AssemblyName System.Net.Http
@@ -1755,6 +1767,7 @@ Last-FilerFane
 Sett-AktivFane -Navn "Filer"
 
 $form.Controls.AddRange(@($pnlFaneFiler, $pnlFaneMakroer, $pnlFaneKunnskap, $pnlBunnDeler, $lblStatusBunn, $cmdStartNytt, $cmdOppdater))
+$cmdOppdater.BringToFront(); $cmdStartNytt.BringToFront()
 $form.Add_Shown({ $form.Activate(); Start-OppdateringSjekk })
 
 # ---- Gjor vinduet faktisk resizable: reposisjoner/bygg om innholdet nar
@@ -1809,6 +1822,7 @@ function Oppdater-FasteKontroller {
     $cmdStartNytt.Top = $form.ClientSize.Height - $bottomH + 13
     $cmdOppdater.Left = $cmdStartNytt.Left - 10 - $cmdOppdater.Width
     $cmdOppdater.Top = $cmdStartNytt.Top
+    $lblStatusBunn.Width = [Math]::Max(100, $cmdOppdater.Left - 12 - $lblStatusBunn.Left)
 }
 
 $form.Add_Resize({

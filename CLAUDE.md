@@ -46,7 +46,7 @@ NB: noen eldre avsnitt i HTML-fila beskriver fortsatt OneDrive-stier og rollene 
 
 1. Endre kilden, test lokalt (EMI-kilden må rekompileres med ps2exe og `$LauncherVersion` + `-version` bumpes hvis `Installer/Excel Macro Installer.ps1` endres; makroer bumper sin egen versjonsvariabel).
 2. Commit og push til `main`.
-3. Øk `Excel Macro Installer/versjon.json` (`versjon` = `aaaa.MM.dd.N`, høyere enn forrige; `dato`; `emi` = gjeldende `$LauncherVersion`; `endringer`) og push til `main`. Når exe-en ikke er endret, kan en sky-økt gjøre dette direkte. Når exe-en er rekompilert, bruker en lokal økt `Prosjektfiler/_publisering/Publiser-EMI.ps1 -Repo <midlertidig klone> -Endringer "…"`, som også sjekker at exe-ens versjon matcher kilden. EMI hos brukerne tilbyr da «Oppdater EMI» ved neste oppstart (GitHub cacher i ca. 5 min).
+3. Øk `Excel Macro Installer/versjon.json` (`versjon` = `aaaa.MM.dd.N`, høyere enn forrige; `dato`; `emi` = gjeldende `$LauncherVersion`; `endringer`) og push til `main`. En sky-økt kan gjøre dette direkte KUN når `$LauncherVersion` i kilden fortsatt er lik exe-ens versjon (ingen ukompilert EMI-endring venter). Er EMI-kilden endret, kompilerer og publiserer en lokal økt etter `Prosjektfiler/_publisering/KOMPILER-OG-PUBLISER-EMI.md`. EMI hos brukerne tilbyr da «Oppdater EMI» ved neste oppstart (GitHub cacher i ca. 5 min).
 
 ## Sesjonshygiene
 
