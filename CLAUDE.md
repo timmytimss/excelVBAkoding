@@ -6,9 +6,10 @@ Dette er Håkons Excel/VBA/PowerShell-verktøykasse: Excel Macro Installer (EMI)
 
 - **GitHub er den eneste fasiten:** `timmytimss/excelVBAkoding` (OFFENTLIG), gren `main`. Det finnes ingen OneDrive-kopi lenger.
 - **Sky-økter** (claude.ai/code) jobber direkte i repoet: kildekode, dokumentasjon, planlegging.
-- **Lokale økter** (på Håkons PC, nødvendig for testing i Excel/EMI) jobber i `C:\Users\haaklun\Documents\excelVBAkoding` (en vanlig git-klone). Start ALLTID med `git pull origin main`, og commit/push når en fungerende endring er klar — da ser sky-øktene den også.
+- **Det finnes INGEN fast git-klone på Håkons PC** (fjernet 2026-10-12 etter hans ønske — ikke opprett `Documents\excelVBAkoding` eller andre faste kloner igjen uten at han ber om det). Håkon tester via sin installerte EMI, som henter nye versjoner fra GitHub.
+- **Lokale økter** (på Håkons PC, kun når noe MÅ gjøres lokalt, f.eks. COM-testing eller rekompilering av EMI-exe-en) lager en midlertidig klone i `%TEMP%`, gjør jobben, pusher til `main` og sletter klonen etterpå.
 - Push som `timmytimss` (remote `https://timmytimss@github.com/timmytimss/excelVBAkoding.git`), commit som `timmytimss <timmytimss@users.noreply.github.com>`.
-- **Håkons installerte EMI:** `C:\Users\haaklun\Documents\Excel Macro Installer`. Den oppdaterer seg selv fra repoet. Utviklingskopier (git-klonen) oppdateres aldri automatisk.
+- **Håkons installerte EMI:** `C:\Users\haaklun\Documents\Excel Macro Installer`. Den oppdaterer seg selv fra repoet. Utviklingskopier (git-kloner) oppdateres aldri automatisk.
 - **Privat materiale** som ikke skal være offentlig (gamle overleveringsnotater, minne-backup, kontoflyttingsplan, gammel git-historikk) ligger i det private repoet `timmytimss/timssboka` under `arkiv/excel-vba-koding/`.
 - Kontoer og infrastruktur (GitHub, Cloudflare, Google) er beskrevet i `timssboka/kilder/2026-10-08-kontoer-infrastruktur-og-lardommer.md`.
 
@@ -45,7 +46,7 @@ NB: noen eldre avsnitt i HTML-fila beskriver fortsatt OneDrive-stier og rollene 
 
 1. Endre kilden, test lokalt (EMI-kilden må rekompileres med ps2exe og `$LauncherVersion` + `-version` bumpes hvis `Installer/Excel Macro Installer.ps1` endres; makroer bumper sin egen versjonsvariabel).
 2. Commit og push til `main`.
-3. Kjør `Prosjektfiler/_publisering/Publiser-EMI.ps1 -Repo C:\Users\haaklun\Documents\excelVBAkoding -Endringer "…"` (øker `versjon.json` og pusher). EMI hos brukerne tilbyr da «Oppdater EMI» ved neste oppstart.
+3. Øk `Excel Macro Installer/versjon.json` (`versjon` = `aaaa.MM.dd.N`, høyere enn forrige; `dato`; `emi` = gjeldende `$LauncherVersion`; `endringer`) og push til `main`. Når exe-en ikke er endret, kan en sky-økt gjøre dette direkte. Når exe-en er rekompilert, bruker en lokal økt `Prosjektfiler/_publisering/Publiser-EMI.ps1 -Repo <midlertidig klone> -Endringer "…"`, som også sjekker at exe-ens versjon matcher kilden. EMI hos brukerne tilbyr da «Oppdater EMI» ved neste oppstart (GitHub cacher i ca. 5 min).
 
 ## Sesjonshygiene
 
