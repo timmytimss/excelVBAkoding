@@ -49,7 +49,7 @@ $ae = [char]0x00E6
 $moduleCodeRaw = @'
 Option Explicit
 
-Public Const MAKROMENY_VERSION As String = "2.8.0"
+Public Const MAKROMENY_VERSION As String = "2.8.1"
 ' Navnet paa en evt. gammel "baandknapp"-verktoylinje fra en tidligere
 ' versjon (2.4.0-2.4.2, siden fjernet igjen - Haakons eksplisitte onske
 ' 2026-09-23: han provde funksjonen, likte ikke resultatet). Konstanten
@@ -568,7 +568,9 @@ Option Explicit
 Private mTiles As Collection
 
 Private Const TILE_W As Single = 150
-Private Const TILE_H As Single = 90
+' Lave fliser med ikonet til venstre for navnet (2.8.1): med seks makroer
+' fikk ikke de hoye flisene plass uten rullefelt.
+Private Const TILE_H As Single = 52
 Private Const TILE_GAP As Single = 10
 Private Const KOLONNER As Long = 2
 
@@ -641,7 +643,7 @@ Private Sub ByggMeny()
             .Caption = info(1)
             .BackColor = info(3)
             .ForeColor = RGB(35, 38, 46)
-            .Font.Size = 11
+            .Font.Size = 10
             .Font.Bold = True
             .ControlTipText = info(2)
         End With
@@ -649,7 +651,7 @@ Private Sub ByggMeny()
         Set ico = HentMakroIkon(CStr(info(0)))
         If Not ico Is Nothing Then
             Set newBtn.Picture = ico
-            newBtn.PicturePosition = fmPicturePositionAboveCenter
+            newBtn.PicturePosition = fmPicturePositionLeftCenter
         End If
 
         Set tileHandler = New clsMakroTile
@@ -668,10 +670,11 @@ Private Sub ByggMeny()
     Dim neededHeight As Single
     neededHeight = totalRows * (TILE_H + TILE_GAP)
 
-    If neededHeight > 280 Then
+    ' Rullefelt forst over ca. 7 rader (14 makroer) - til da far alt plass.
+    If neededHeight > 440 Then
         frameMeny.ScrollBars = fmScrollBarsVertical
         frameMeny.ScrollHeight = neededHeight
-        frameMeny.Height = 280
+        frameMeny.Height = 440
     Else
         frameMeny.ScrollBars = fmScrollBarsNone
         frameMeny.Height = IIf(neededHeight > 0, neededHeight, 40)

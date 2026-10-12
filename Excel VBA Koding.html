@@ -1351,9 +1351,10 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
     <li>Idéer: gjeninnføre «Marker alle» i hovedmenyen (fjernet på Håkons ønske — spør før den legges tilbake); eksport/backup av registeret; migrere Håkons egen snarveimakro til å kalle en fremtidig <code>Public RefreshConnectionRows</code> i stedet for å gå via enkeltrader.</li>
   </ul>
 </section>
-<section class="macro" id="mac-makromeny" data-nav="Makroer i drift|Makromeny" data-title="Makromeny" data-status="I drift · v2.8.0">
+<section class="macro" id="mac-makromeny" data-nav="Makroer i drift|Makromeny" data-title="Makromeny" data-status="I drift · v2.8.1">
   <h2>Makromeny</h2>
   <p class="lead">Én felles startmeny (UserForm med fargede fliser) i en .xlsm som viser og starter akkurat de EMI-makroene som er installert i den arbeidsboken, slik at man slipper én knapp per makro.</p>
+  <p><strong>2.8.1 (2026-10-12):</strong> lavere fliser (52 pt, ikon til venstre for navnet, skrift 10) og rullefelt først over 440 pt, så seks makroer får plass uten rulling (Håkons ønske).</p>
   <p><strong>2.8.0 (2026-10-12):</strong> registrert Katalogmekker (Case 6 i <code>HentKjentMakroInfo</code>, flisfarge RGB(236,252,203), eget ikon i <code>HentMakroIkon</code>).</p>
   <p><strong>2.7.0 (2026-09-29):</strong> registrert ny sjette makro «Statistikkern» i <code>HentKjentMakroInfo</code> + eget innebygd ikon i <code>HentMakroIkon</code>, slik at den vises i menyen når installert.</p>
   <p><strong>2.6.0 (2026-09-24):</strong> ryddet UI etter Håkons ønske - fjernet tittel-labelen «MAKROMENY» på hovedmenyen, «Oppdater liste»-knappen (Installert info sentrert) og overskriften «Installert i denne arbeidsboken» i info-vinduet. Installeren fikk samtidig <code>-Force</code> (brukes av EMIs «Reinstaller alle»).</p>
