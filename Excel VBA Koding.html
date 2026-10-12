@@ -563,7 +563,7 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
       <tr><td>2.9.0.0 (2026-10-08, Kjetil)</td><td>Oppdatering fra det offentlige GitHub-repoet: sjekk ved oppstart, «Oppdater EMI»-knapp, hvitelistet filbytte med omdøping av filer i bruk og tilbakerulling. Utviklingskopier oppdateres aldri. Se <a href="#mac-emi-selvoppdatering">Selvoppdatering</a>.</td></tr>
           <tr><td>2.9.1.0 (10-12)</td><td>Oppdateringsknappen er oransje («Ny versjon – oppdater EMI», samme fargefamilie som toppteksten) og dekkes ikke lenger av statusteksten nederst (den hadde fast bredde 500 og hvit bakgrunn, og lå over venstre del av knappen).</td></tr>
       <tr><td>2.9.2.0 (10-12)</td><td>Versjonssjekken bruker GitHubs API i stedet for raw.githubusercontent, som mellomlagret i 5 min og ignorerte <code>?t=</code> (se <a href="#g-emi-raw-cache-ignorerer-query">gotcha</a>). raw er reserve.</td></tr>
-      <tr><td>2.9.3.0 (10-12)</td><td>Toppteksten viser alltid gjeldende versjon i grått. Oppdateringsknappen har to linjer: «Oppdater EMI» og en mindre linje med den nye versjonen. Toppteksten fikk mer margin (siste bokstav ble klippet).</td></tr>
+      <tr><td>2.9.3.0 (10-12)</td><td><strong>Feil:</strong> knappens andre linje kastet en unntaksdialog ved tegning (se <a href="#g-ps-komma-operator">g-ps-komma-operator</a>); selve oppdateringen virket. Toppteksten viser alltid gjeldende versjon i grått. Oppdateringsknappen har to linjer: «Oppdater EMI» og en mindre linje med den nye versjonen. Toppteksten fikk mer margin (siste bokstav ble klippet).</td></tr>
       <tr><td>2.9.4.0 (10-12)</td><td>Oppdateringsknappen på én linje: «Oppdater EMI» + ny versjon i mindre skrift. Første EMI-versjon bygget og publisert automatisk av GitHub Actions etter at 2.9.3.0 testet jobben.</td></tr>
 </tbody>
   </table>
@@ -4249,7 +4249,7 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
     <dt>Årsak</dt><dd>Komma-operatoren har høyere presedens enn binær minus.</dd>
     <dt>Løsning</dt><dd>Parenteser rundt uttrykket: <code>($a, ($b-2))</code>.</dd>
   </dl>
-  <p class="src">Kilde: Makromeny (ikon-scripts)</p>
+  <p class="src">Kilde: Makromeny (ikon-scripts). Gjentatt i EMI 2.9.3.0 (2026-10-12): <code>New-Object System.Drawing.Rectangle(0, $y, $s.Width, $h2 + 2)</code> i oppdateringsknappens <code>Paint</code> ga «Cannot find an overload for "Rectangle" and the argument count: "5"» ved hver tegning (knappen ble et rødt kryss, men virket). Røyktesten i GitHub Actions fanget det ikke, fordi knappen bare tegnes når en oppdatering finnes. Rettet i 2.9.4.0. Regel: sett alltid parenteser rundt utregnede argumenter i <code>New-Object Type(...)</code>.</p>
 </div>
 
 <div class="gotcha" id="g-ps-pen-single" data-cat="powershell">
