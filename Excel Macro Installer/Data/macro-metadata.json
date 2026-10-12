@@ -22,5 +22,9 @@
   "Statistikkern": {
     "Beskrivelse": "Fører statistikk over unike verdier i valgte kolonner i en eller flere tabeller, vist som fargede fliser (farge hentet fra cellens faktiske fyllfarge). Valgfri underkolonne bryter tallene ned videre innad i hver hovedverdi.",
     "Ikon": "icon-statistikkern.ico"
+  },
+  "Katalogmekker": {
+    "Beskrivelse": "Lager en kontaktfil (.vcf) fra en tabell, klar for import i Google Kontakter eller på en Android-telefon. Telefonnummeret renskrives til norsk standard, navnet settes sammen fra valgfrie kolonner, og en felles kategori blir etikett. Forhåndsvisning viser en eksempelkontakt før fila lages.",
+    "Ikon": "icon-katalogmekker.ico"
   }
 }

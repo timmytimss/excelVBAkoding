@@ -1339,9 +1339,10 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
     <li>Idéer: gjeninnføre «Marker alle» i hovedmenyen (fjernet på Håkons ønske — spør før den legges tilbake); eksport/backup av registeret; migrere Håkons egen snarveimakro til å kalle en fremtidig <code>Public RefreshConnectionRows</code> i stedet for å gå via enkeltrader.</li>
   </ul>
 </section>
-<section class="macro" id="mac-makromeny" data-nav="Makroer i drift|Makromeny" data-title="Makromeny" data-status="I drift · v2.7.0">
+<section class="macro" id="mac-makromeny" data-nav="Makroer i drift|Makromeny" data-title="Makromeny" data-status="I drift · v2.8.0">
   <h2>Makromeny</h2>
   <p class="lead">Én felles startmeny (UserForm med fargede fliser) i en .xlsm som viser og starter akkurat de EMI-makroene som er installert i den arbeidsboken, slik at man slipper én knapp per makro.</p>
+  <p><strong>2.8.0 (2026-10-12):</strong> registrert Katalogmekker (Case 6 i <code>HentKjentMakroInfo</code>, flisfarge RGB(236,252,203), eget ikon i <code>HentMakroIkon</code>).</p>
   <p><strong>2.7.0 (2026-09-29):</strong> registrert ny sjette makro «Statistikkern» i <code>HentKjentMakroInfo</code> + eget innebygd ikon i <code>HentMakroIkon</code>, slik at den vises i menyen når installert.</p>
   <p><strong>2.6.0 (2026-09-24):</strong> ryddet UI etter Håkons ønske - fjernet tittel-labelen «MAKROMENY» på hovedmenyen, «Oppdater liste»-knappen (Installert info sentrert) og overskriften «Installert i denne arbeidsboken» i info-vinduet. Installeren fikk samtidig <code>-Force</code> (brukes av EMIs «Reinstaller alle»).</p>
   <dl class="facts">
@@ -1635,6 +1636,35 @@ Invoke-ps2exe -inputFile "&lt;base&gt;\Installer\Excel Macro Installer.ps1" -out
 <tr><td>v1.3.0 (2026-10-02, Nils)</td><td>Tredje visning «Horisontal»: smale, like brede fliser (bredden måles fra den lengste teksten via en midlertidig AutoSize-label), alle fliser fra en tabell i én rad, vinduet tilpasses bredden (begrenset til Excel-vinduet, da med vannrett rullefelt - IKKE testet), flere tabeller under hverandre. Knappen veksler Liste → Rute → Horisontal og viser gjeldende visning; valget huskes (Liste/Rute/Horisontal i G1). Data beregnes nå én gang (<code>ByggData</code>) og tegnes etterpå. Rullingen nullstilles ved hver ombygging.</td></tr>
     </tbody>
   </table>
+</section>
+<section class="macro" id="mac-katalogmekker" data-nav="Under utvikling|Katalogmekker" data-title="Katalogmekker" data-status="Under utvikling · v0.1.0 (prototype, ikke testet i Excel)">
+  <h2>Katalogmekker</h2>
+  <p class="lead">Lager en kontaktfil (<code>.vcf</code>, vCard 3.0) fra en tabell, til import i Google Kontakter (contacts.google.com &gt; Importer) eller direkte på en Android-telefon. Telefonnummeret er nøkkelen: det renskrives til norsk standard, og navnet settes sammen fra valgfrie kolonner.</p>
+  <dl class="facts">
+    <dt>Versjon</dt>
+    <dd>0.1.0 (2026-10-12, sky-økt). Prototype skrevet etter Håkons spesifikasjon; <strong>ikke kompilert eller kjørt i Excel ennå</strong>. Konstanten <code>KATALOGMEKKER_VERSION</code> i <code>modKatalogmekker</code>.</dd>
+    <dt>Kilde</dt>
+    <dd><code>Excel Macro Installer\Macros\Katalogmekker.ps1</code> (UTF-8 med BOM, LF), samme installer-mønster som Statistikkern.</dd>
+    <dt>VBA-komponenter</dt>
+    <dd>3: <code>modKatalogmekker</code> (innstillinger, nummerrensing, vCard, fillagring, inngangspunkt <code>AapneKatalogmekker</code>), <code>clsKatalogmekkerNavn</code> (WithEvents-handler for de dynamiske avkrysningsboksene, se <a href="#g-dynamiske-kontroller-withevents">g-dynamiske-kontroller-withevents</a>), <code>frmKatalogmekker</code> (ett vindu: valg til venstre, forhåndsvisning til høyre).</dd>
+    <dt>Innstillinger</dt>
+    <dd>Skjult ark <code>KatalogmekkerOppsett_Hidden</code>, nøkkel i A / verdi i B (Ark, Tabell, Nummerkolonne, Navnekolonner, Separator, Kategori, Landskode, KunSynlige). Verdiene skrives med apostrof foran så skilletegn med mellomrom og tall som «0047» lagres uendret. Lagres ved lukking og når fila lages.</dd>
+    <dt>Ikon/farge</dt>
+    <dd><code>icon-katalogmekker.ico</code> (lime gradient, hvit adressebok med person og fargede faneflikker), laget programmatisk etter samme stil som de andre (128×128 32-bit DIB i ICO, 40×40 BMP-base64 i Makromeny). Flisfarge i Makromeny: RGB(236,252,203). <strong>Åpent:</strong> EMI har ingen egen plate for den ennå, så hash-reserven gir indeks 2 (grønn, samme som Kontaktsentralen) til noen legger en ny lime-farge i <code>$script:IkonBakgrunner</code>/<code>$script:IkonBakgrunnPerMakro</code> og rekompilerer EMI.</dd>
+  </dl>
+
+  <h3 id="mac-katalogmekker-regler">Regler for nummer, navn og kategori</h3>
+  <ul>
+    <li><strong>Nummer:</strong> alt som ikke er siffer fjernes; «+» før første siffer betyr landskode. +47 / + 47 / 0047 foran fjernes; «47» foran fjernes når nummeret er lenger enn 8 siffer. Resultatet må være nøyaktig 8 siffer, ellers hoppes raden over (utenlandske nummer avvises). Valgfritt «Skriv numrene med +47 foran» i fila. Tall lagret som tall i cellen leses uten E-notasjon.</li>
+    <li><strong>Hoppes over og listes</strong> (radnummer i arket): «...» eller ellipsetegnet (U+2026) i nummer- eller navnecellene, manglende nummer, ugyldig nummer, og samme nummer som en tidligere rad (første rad vinner). Helt tomme rader telles bare.</li>
+    <li><strong>Navn:</strong> valgte kolonner i den rekkefølgen de hukes av, med «Kun første ord» per kolonne og fritt skilletegn. Tomme deler hoppes over (ingen doble skilletegn). Hele navnet legges i fornavnfeltet i <code>N</code> og i <code>FN</code>; uten navn brukes nummeret.</li>
+    <li><strong>Kategori:</strong> felles for alle, skrives i <code>CATEGORIES</code>; flere skilles med komma. Om Google faktisk lager etiketter av dette ved vCard-import er <strong>ikke bekreftet</strong> - test det. Reserveplan: Googles egen CSV med etikettkolonne.</li>
+    <li><strong>Fil:</strong> UTF-8 uten BOM (ADODB.Stream, de 3 første bytene hoppes over), CRLF. Lange linjer foldes ikke.</li>
+    <li><strong>Oppdatering:</strong> import legger alltid TIL kontakter. Siden nummeret er nøkkelen, skal Googles «Slå sammen og rett» finne duplikatene etter en ny import - også dette må bekreftes i test.</li>
+  </ul>
+
+  <h3 id="mac-katalogmekker-test">Testing</h3>
+  <p>Varig testfil: <code>Prosjektfiler\Testfiler\Katalogmekker-testkontakter.xlsx</code> (oppdiktede navn/numre, én testsak per rad med kolonnen «Forventet resultat», en skjult rad, og en ekstra tabell på eget ark). Kopier arkene inn i <code>Testfil.xlsm</code> eller lagre som .xlsm før installasjon. Gjenstår: installasjon + kompileringssjekk i en lokal økt, ekte klikk-test av skjemaet, og en testimport av den genererte fila i en Google-konto (etiketter og «Slå sammen og rett»).</p>
 </section>
 <section class="macro" id="mac-kolonnevelger" data-nav="Under utvikling|Kolonnevelger" data-title="Kolonnevelger" data-status="Under utvikling · v1.0.1 (tidlig, ikke prioritert nå)">
   <h2>Kolonnevelger</h2>

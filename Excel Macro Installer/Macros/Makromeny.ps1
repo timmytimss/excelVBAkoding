@@ -49,7 +49,7 @@ $ae = [char]0x00E6
 $moduleCodeRaw = @'
 Option Explicit
 
-Public Const MAKROMENY_VERSION As String = "2.7.0"
+Public Const MAKROMENY_VERSION As String = "2.8.0"
 ' Navnet paa en evt. gammel "baandknapp"-verktoylinje fra en tidligere
 ' versjon (2.4.0-2.4.2, siden fjernet igjen - Haakons eksplisitte onske
 ' 2026-09-23: han provde funksjonen, likte ikke resultatet). Konstanten
@@ -159,6 +159,12 @@ Public Function HentKjentMakroInfo(ByVal Indeks As Long, ByRef Komponentnavn As 
             Visningsnavn = "Statistikkern"
             Beskrivelse = "Statistikk over unike verdier i valgte kolonner, vist som fargede fliser."
             Farge = RGB(254, 226, 226)
+        Case 6
+            Komponentnavn = "modKatalogmekker"
+            OnActionNavn = "AapneKatalogmekker"
+            Visningsnavn = "Katalogmekker"
+            Beskrivelse = "Lag en kontaktfil (.vcf) for mobilen fra en tabell med telefonnummer."
+            Farge = RGB(236, 252, 203)
         Case Else
             HentKjentMakroInfo = False
             Exit Function
@@ -236,6 +242,7 @@ Public Function HentMakroIkon(ByVal OnActionNavn As String) As IPictureDisp
         Case "VisKontaktsentralen": b64 = IconB64_Kontaktsentralen()
         Case "AapneNettskjemaHenter": b64 = IconB64_NettskjemaHenter()
         Case "AapneStatistikkern": b64 = IconB64_Statistikkern()
+        Case "AapneKatalogmekker": b64 = IconB64_Katalogmekker()
         Case Else: b64 = ""
     End Select
     If Len(b64) > 0 Then
@@ -483,6 +490,55 @@ Private Function IconB64_Statistikkern() As String
     s = s & "AAAAAAAAAAAAAAAAAAAAAAAAAAAAANTU+TDR0fxgz8/7gM3N+4DLy/uAycn7gMfH+4DFxfuAw8P7gMHB+4C/v/uAv7/5gL29+YC7u/mAubn5gLe3+YC1tfmAs7P5gLGx+YCvr/mAra35gKur94CpqfeAp6f3gKWl94Ciovdgn5/0MAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     s = s & "AAAAAA=="
     IconB64_Statistikkern = s
+End Function
+
+Private Function IconB64_Katalogmekker() As String
+    Dim s As String
+    s = s & "Qk02GQAAAAAAADYAAAAoAAAAKAAAACgAAAABACAAAAAAAAAAAADEDgAAxA4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH//fwIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    s = s & "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf38CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFWqVQMAAAAAAAAAADeqezw1o3h7NKN3mjOfdJ4yn3OdMp1xnTCbcJ0vmG6dL5dsnS2Va50rk2mdK5JnnSqQZp0ojWSdKItjnSaK"
+    s = s & "YZ0liF+dJYZenSOFXJ0ig1qdIoFZnSB+V50gfVadHntUnR15Up4ceFGaGnZOexl3UDwAAAAAAAAAAABVVQMAAAAAAAAAAAAAAAAAAAAAAAAAAFWqVQMAAAAAN6t9NzqtfsE4qX3/Oa1//zeqfP82qHr/NaZ5/zWkd/8zonX/MqBz/zGecv8wnHD/L5pv/y6Zbf8tlmv/"
+    s = s & "LJVp/yuTaP8pkWb/KI9l/yeNY/8mi2H/JYlg/ySHXv8jhVz/IoNa/yGBWf8gf1f/H31V/x58VP8cdlD/GnVPwRdzSjcAAAAAAFVVAwAAAAAAAAAAAAAAAH9/fwIAAAAAPK6BVTuvgvg7r4H/N6R4/TWid/s1n3X8NJ50/DOcc/wymnH8MZhv/DCWbvwvlWz8LpNr/C2R"
+    s = s & "afwskGf8Ko5m/CqMZPwpimP8KIlh/CaHX/wlhV78JINc/COBW/wigFn8In5X/CB8VvwfelP8HnhS/B13UPwcdU/7G3JN/Rx3UP8adU74GHJLVQAAAAAAf38CAAAAAFWqVQMAAAAAPrKGNT2yhfk7rID/OaZ8/Dmme/83pHn/NqN4/zWhdv80n3X/NJ1z/zKbcf8xmXD/"
+    s = s & "MJhu/y+Wbf8ulGv/LZJp/yyQaP8rj2b/Ko1l/ymLY/8oiWL/J4dg/yaFX/8lhF3/JIJc/yOAWv8if1j/IX1W/yB7Vf8feVP/HndR/x12UP8bc038G3RO/xp0TfkYc0w1AAAAAABVVQMAf38CVaqqAz6yhcVAt4j/Oqt++zuqfv86qH3/OKZ7/zekef82onj/OKF4/zef"
+    s = s & "dv82nHP/NJpy/zSXcP8zlm7/MpRt/zCSa/8vkWn/Lo5o/y2NZv8ti2X/LIpj/yuIYv8qhmD/KYRf/yiCXf8kgFr/I39Z/yJ+WP8hfVb/IHtV/x95U/8ed1H/HXZQ/xtzTvsceFD/G3FMxQBVVQMAfwACAAAAAEG0iDpBuIr/Pa6C/Tytgf87q4D/O6p+/zmofP84pnv/"
+    s = s & "OKR5/yqab/8jj2X/IIZe/x6CWf8cf1j/HH5W/xp8Vf8ZelP/GHlR/xd3UP8Xdk7/FnRN/xRyS/8UcEr/E29J/xJtR/8SbEf/H3VS/yN7Vv8ifVf/In5Y/yF9Vv8ge1T/H3lT/x53Uf8ddVD/G3NO/Rx2UP8ack86AAAAAAAAAABBt4l8RcCQ/j2whPs+r4L/Pa2B/zur"
+    s = s & "gP87qn7/Oqh9/zOhd/90tZj/m8Cs/5rDsf+cxLT/nMOz/5zDs/+bwrL/m8Gx/5rBsP+awLD/mr+v/5m+r/+Zvq7/mL2t/5e9rf+YvK3/gKya/yhzU/8abkv/I3lV/yJ+WP8iflj/IX1W/yB7VP8feVP/HndS/xx1T/sdfFT+GnNOfAAAAAAAAAAAQ7yOmkXBkf8/soX8"
+    s = s & "P7GE/z6vg/89rYH/PqyB/zCleP9+vaH//+7r//vs6P//8/D////////////////////////////////////////////////////////////////////////////E18//G2pJ/yF1Uv8kfln/I4Ba/yJ/WP8hfVb/IHtV/x95U/8dd1D8H31V/x13UZoAAAAAAAAAAEW+"
+    s = s & "jp1Gw5P/QLSG/ECzhv8/sYT/Pq+D/0Cug/8up3n/stXC///x7v/u6+P/7ebf//j49//7/fz/+/38//n6+P/n4Nn/5d3V/+Xe1f/l3tX/5d7V/+Xe1v/k3NT/9PPw//v8/P/7/Pz//////0SEav8YbUv/JoBb/ySCW/8jgFn/In5Y/yF9Vv8ge1X/HnlS/CB/V/8deVKd"
+    s = s & "AAAAAAAAAABFv5CdR8WU/0G2iPxBtIf/QLOG/z+xhP9AsYX/M6R4/6G+q//n2NP/3NTM/+/m4f/8+vr////////////+/v7/7ubg/+vj3f/s5N3/7OTd/+zk3f/s5N7/6+Pc//r49v///////v7+//7+/v9HiGf/FnBD/yaCW/8lhF3/JIJb/yOAWf8iflj/IX1W/x96"
+    s = s & "U/whgVn/HntUnQAAAAAAAAAARcGTnUjHlv9Ct4n8QraJ/0G0h/9AsoX/PrSG/1FZRP9RMyb/TTor/0IsHf+qnJL///////3+/v/+/v3/+fj1//v6+f/7+vn/+/r5//v6+f/7+vn/+/r5//v7+f/6+Pb//Pv6////////////TYGF/x9maf8ogmD/JoZd/yWEXf8kglv/"
+    s = s & "I4BZ/yJ+WP8gfFb8IoNa/yB9Vp0AAAAAAAAAAEnCk51JyZf/QrmL/EO4iv9Cton/QbSH/0C2iP9Aimf/gYZ1/6iXjv+ekIb/1cvE//38/P/+/v7/8/Ht/93Rxv/d08j/3dLH/93Sx//d0sf/3dLH/93Sx//d08j/3NDF/+rl3//9/v7////+/2Zn8v8/N/n/OGOu/yWL"
+    s = s & "Vv8mhWH/JYRc/ySCW/8jgFn/In5X/COFXP8gfledAAAAAAAAAABJxpWdS8qZ/0S7jfxEuoz/Q7iL/0K2if9EtYn/MrOC/7Lcx///9/X/+PLt//Ts5v/8+fn///////////////////////////////////////////////////////////////////////////9mZ/D/"
+    s = s & "Pjj3/z1bwv8mjFj/KIdi/yaGXv8lhF3/JIJb/yKAWfwkh17/IoFZnQAAAAAAAAAASseXnUzNm/9FvY78RbyO/0S6jP9DuIv/RbiL/zO1hf+x2cT///Pw//Tv6f/07eb//v39/93t5v9ep4f/YKmK/2Cpiv9gqYr/YKmK/2Cpiv9gqYr/YKmK/2Cpiv9iqoz/VqOC/7LV"
+    s = s & "xv//////ZGft/z459f89Xr3/KI9a/ymJY/8nh2D/JoZe/yWEXf8jgVv8JYlg/yKDWp0AAAAAAAAAAEzJmJ1Nzp3/Rr6Q/Ea9j/9FvI7/RLmM/0O8jf9Jd1n/a2BS/35tYf91Y1f/v7Ws//////+u0sP/AGw3/wN1RP8Ac0H/AHNB/wBzQf8Ac0H/AHNB/wBzQf8Ac0H/"
+    s = s & "BHZF/wBqNf9kq43//////2Rk8f9ANf3/PlvF/yiRW/8qimX/KIlh/yeHYP8mhl7/JINc/CaLYf8jhVydAAAAAAAAAABMy5qdTtGe/0fAkfxHv5H/Rr2P/0W7jf9EvY//TmpR/15KPf9nVUj/XEk7/7Oon///////uNjK/wd3Rv8Vf1L/En5P/xJ+UP8SflD/En5Q/xJ+"
+    s = s & "UP8SflD/En5Q/xaAUv8EdUT/drSZ//////9da9r/N0Lc/zdxmv8qkl7/Koxm/ymLY/8oiWH/J4dg/yWFXvwnjWP/JYZenQAAAAAAAAAATcybnU/ToP9IwpP8SMGS/0e/kf9GvY//R76Q/ze5iP+u1MD/++vn/+7o4f/y7OX///7+/93t5v8RfU//DnxN/w98Tf8PfE3/"
+    s = s & "D3xN/w98Tf8PfE3/D3xN/w98Tf8TflD/AHNB/5/Kt///////TIxv/yF5U/8nkGP/LJBo/yuPZv8qjWT/KYtj/yiJYf8mhl/8KI9k/yWIX50AAAAAAAAAAE/PnZ1R1KL/ScSV/EnDlP9IwZP/SMCR/0m+kf84vIr/teDL///39P/38u3/8urk//r5+P//////U6F//wB0"
+    s = s & "Qv8Uf1H/D3xN/w98Tf8PfE3/D3xN/w98Tf8RfU//C3pK/xyDVv/p8+///////9+XYf/hfDX/f4pY/yOSbP8vkWj/LI9n/yuNZf8qi2T/KIhi/CqRZ/8oimOdAAAAAAAAAABR0aCdU9el/0vGmPxLxZf/SsOW/0nBk/9Kw5X/Q6J5/5Ggjv/Csar/uKyj/+HX0f/7+/r/"
+    s = s & "/v7+/9jp4v8UflD/BndG/xV/Uf8SfU//EX1O/xF9T/8TflD/D3xN/wBxP/+gy7j///////3////6mWD//3wv/7qITP8jlW//MpNq/y6Raf8tkGj/LI5m/yuLZPwtlGn/Ko1knQAAAAAAAAAAVNOknVbZqP9OyJr8TseZ/03GmP9Mw5b/S8aY/1VYRf9MKh//RTMk/zsk"
+    s = s & "Ff+mmI7///////z8/P//////xN/T/ySHXP8Acj//AXRC/wN1RP8CdUP/AHJA/wx6Sv+Rw67///////3+/f//////9Jlg//18MP+xik//Jphy/zSWbf8wlGz/L5Jq/y6Raf8tjmf8L5ds/yuQZ50AAAAAAAAAAFbUpZ1Y26r/UMqc/FDKnP9PyJr/TsaY/0/Hmf9FroT/"
+    s = s & "mrCe/9LBu//IvrX/59/Y//37+////////f79///////t9fL/i7+o/1iigf9Gmnb/T598/3WzmP/S597///////3+/f////////////WZYP//fDD/uopN/ymadf83mG//M5du/zKVbf8xk2z/L5Fq/DKab/8vk2mdAAAAAAAAAABX2KedW96s/1PNn/xSzJ7/Ucud/1HJ"
+    s = s & "m/9Sx5r/QsWU/7nkzv//9vP/+PLt//Lq5P/8+vr////////////8/f3///////////+52cv/e7ee/57Ktv////////////z9/f/////////////////0mmL//Hwy/5qPWP8snXf/OZty/zaZcf81mHD/NJZu/zKTbPw1nHL/MpVsnQAAAAAAAAAAWtmqnV3grv9Vz6D8"
+    s = s & "Vc6g/1TMn/9Typ3/VMqe/0bElf+v0b7/8uLe/+fg2f/z6uX//Pr6/////////////f7+//z9/P9lqoz/AHA9/wB0Qv8AcD3/Mo5m/+Xx6//+/v7//f7+////////////bpNv/0uAUP89mW//OZ94/zqddf84nHT/N5py/zaYcf80lW/8N551/zOYbp0AAAAAAAAAAFzb"
+    s = s & "rJ1f4rD/WNCj/FfQov9WzqH/Vcyf/1TPof9UZ1D/Vj0w/1pHOf9POiz/sKOZ///////9/f3//P38//////+32Mn/AHJA/xN+UP8TflD/FoBT/wBvPP9zspf///////z9/f/+/////////0LA0f8Otcr/M6qY/z+fdf87oHn/O552/zqddf85m3P/N5hx/Dqid/83mnOd"
+    s = s & "AAAAAAAAAABe3K2dYuSz/1rSpPxZ0qT/WNCj/1fOof9X0aP/Uo5u/3dzZP+Rf3X/h3ds/8vAuP/+/f3//v7+//v9/P//////hLyk/wJ0Qv8UflD/D3xN/xJ9T/8Gd0f/Qphz///////+/v7//v////////9B2f//CNL//yS/0v9BoHP/PaN8/zygef88n3f/O512/zma"
+    s = s & "dPw9pHv/Op10nQAAAAAAAAAAYeCxnWTmtf9c1ab8XNSn/1vSpf9a0aT/W9Ck/0zQoP+75dD///Px//fy7P/17ef//Pr6///////8/fz//////6bOvP8AcT7/FoBS/xJ9T/8XgFP/AHJA/2Coif///////P39//7/////////QdT3/wrL/f8mvs//RKN3/0Cmf/8/o3v/"
+    s = s & "PqF6/z6feP88nHb8P6d9/zyfeJ0AAAAAAAAAAGPjsp1m6bj/Xteo/F7Wqf9d1Kf/XNOm/13Rpv9P06P/vOfS///08f/48+z/9e3n//z6+v///////v/+//7+/v/0+ff/Qpdy/wBvO/8Fd0b/AHJA/xV/UP/S5t3//v/+//z+/f///////////0HU9/8Jy/3/JsDR/0al"
+    s = s & "ef9CqIH/QqV+/0GkfP9Aonv/Pp95/EKpgP8/onmdAAAAAAAAAABm5bSdaOu6/2DZrPxg2Kv/X9aq/17Up/9f16n/VZRz/3p4af+Vg3n/i3xw/83Cuv/+/f3//v7+///////+/v7///////D38/9/uaD/S516/2WrjP/U6N////////7+/v////////////////8/2f//"
+    s = s & "BdD//ym/zf9JqHr/RaqE/0WogP9Epn//Q6R9/0Ghe/xFrIP/QKV9nQAAAAAAAAAAZ+W3nWvtvP9j2q78Ytqt/2HYq/9g1qn/X9qs/1hoUv9UOi3/V0U2/0w3Kf+uoZj///////39/v////////////7//v////////////////////////////7+/v//////////////"
+    s = s & "////////UrSw/yappP9ErY//SayD/0erhf9HqoP/RqmB/0WngP9DpH78SK6F/0Snfp0AAAAAAAAAAGvouZ1t7r7/Zdyw/GTcr/9j267/Ytms/2TZrf9X1KX/tdbD//Dh3P/n4Nn/8uvl//z6+v///////////////////////v7+//v9/P/8/v3/+/38//3+/f//////"
+    s = s & "///////////+//7//////2Sjg/8/lmv/Ta2F/0uviP9Krof/SayF/0irhP9HqYL/RaaA/EqxiP9HqoGdAAAAAAAAAABt6buab/HA/2fesvxm3rH/Zd2w/2Xbr/9m2a7/WNao/7njzv//7Ov/8Ork//Dn4f/9+/v/////////////////////////////////////////"
+    s = s & "///////////////////+//////////39/P9Zq4z/RamE/06yjP9Nsov/TbCJ/0uviP9LrYb/SquF/0iqgvxNs4v/SqyGmgAAAAAAAAAAbOi5fHL0w/5o4LT7aeCz/2jfsv9n3LD/Z9uw/2DYq/972bX/4OXb//Dn4f/18O3//f7+//7+/v/+/v7//v7+//7+/v/+/v7/"
+    s = s & "/v7+//7+/v/+/v7//v7+//3+/v/9/v7//f7+//P69/+Z0bz/R62F/1K1j/9QtY3/T7SN/0+zjP9OsYr/Ta+I/0yuh/9Lq4X7T7eO/kqshXwAAAAAAAAAAG3tvTpx7sD/a+K2/Writf9p4LT/ad6z/2jdsf9o27D/Ydms/2rYrv972bT/e9q3/3nXtP941rP/eNWy/3fT"
+    s = s & "sP920q//dtCu/3XQrf90zqz/c82r/3PLqf9yyqj/ccmn/3LIpv9kwp3/TbeO/1W6k/9UupL/U7iQ/1K2j/9RtY7/UbOM/0+yi/9PsIn/TK6I/VCzjP9Pr4g6AAAAAH//fwJV/6oDcOq8xXTxwv9s47b7bOK2/2vgtf9q3rP/ad2x/2ncsP9m2q7/Ydes/2DVqf9f06f/"
+    s = s & "XtKm/13Qpf9czqP/W82i/1rLof9ayp//Wcie/1jGnP9XxZv/VsOZ/1XCmP9UwJb/Vb+W/1rAmP9XvpX/VryU/1W6k/9UuJL/VLeQ/1K2j/9StI3/UbGL+1S6kv9QsovFVaqqAwB/fwJVqqoDAAAAAHPwwDVz8ML5cei8/23itvxt4rb/bOC2/2zftP9q3bL/atyx/2ra"
+    s = s & "sP9p2a//aNiu/2fWrP9m1Kv/ZtOq/2XSqP9j0Kf/Y86l/2LMpP9hy6P/YMqh/1/IoP9exp7/XcWd/1zDm/9awZn/Wb+Y/1m+lv9XvJb/VruU/1a5kv9Vt5H/UrWO/FS3kP9WupL5UbaQNQAAAABVqlUDAAAAAH///wIAAAAAde3AVXbxw/h28cP/buO4/W7htvtt4LX8"
+    s = s & "bN6z/Gvcs/xq27H8admw/GjYrvxo1q38Z9Ss/GbTq/xl0qj8ZNCm/GPPpfxizaT8Ycyj/GHKofxfyKD8X8ee/F7FnfxdxJz8XMKb/FvAmfxav5f8Wr6W/Fm8lfxYupT7VrmT/VvCmf9Zv5f4V7eTVQAAAAB//38CAAAAAAAAAAAAAAAAVf+qAwAAAABz8cI3dvHEwXbv"
+    s = s & "wv959cf/d/LE/3bxw/9178H/dO3A/3Psvv9y6r3/cei7/3Hmuv9v5bj/b+S3/27itf9t4LT/bN+z/2vdsf9q27D/admu/2jYrf9n1qv/ZtSq/2bTqf9l0af/ZNCm/2PNpP9izKP/Ycyi/13EnP9cw5rBWL6UNwAAAABVqqoDAAAAAAAAAAAAAAAAAAAAAAAAAABVqqoD"
+    s = s & "AAAAAAAAAAB38sM8dOq+e3PswJpy6Lyecei6nXHmup1x5bmdcOW3nXDjt51u4LSdbOC0nWzcsp1r27Gda9mvnWnYr51p1q2dZ9SsnWfTqp1m06idZtGnnWTOpZ1jzKWdY8yknWHLop1gxp+eYMaeml/Em3thw508AAAAAAAAAABVqlUDAAAAAAAAAAAAAAAAAAAAAAAA"
+    s = s & "AAAAAAAAAAAAAH///wIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB//38CAAAAAAAAAAAAAAAA"
+    s = s & "AAAAAA=="
+    IconB64_Katalogmekker = s
 End Function
 '@
 
