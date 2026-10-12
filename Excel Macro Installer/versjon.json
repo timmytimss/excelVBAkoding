@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.12.2",
+    "versjon":  "2026.10.12.3",
     "dato":  "2026-10-12",
     "emi":  "2.9.1.0",
-    "endringer":  "Oppdateringsknappen er oransje og dekkes ikke lenger av statusteksten."
+    "endringer":  "Testpakke: ingen nye funksjoner. Brukes til å sjekke den nye oransje oppdateringsknappen."
 }
