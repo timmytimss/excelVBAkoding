@@ -56,7 +56,7 @@ public class DpiFix {
 # gang programmet rekompileres - selvoppdaterings-sjekken lenger nede
 # sammenligner disse to (bakt-inn-versjon vs. fersk lest fra .exe-fila pa
 # disk) for a varsle om en nyere versjon ligger klar.
-$LauncherVersion = "2.9.4.0"
+$LauncherVersion = "2.9.5.0"
 
 # Kjort som kompilert .exe (ps2exe, GUI-undersystem - ingen konsoll/
 # terminal-vindu i det hele tatt, uansett Windows sine Terminal-
@@ -1190,30 +1190,47 @@ function Start-OppdateringSjekk {
             }
             $script:oppdTimer.Stop()
             try {
-                if ($info.versjon -and ([version]$info.versjon -gt $script:lokalPakkeVersjon)) { Vis-OppdateringTilgjengelig -Info $info }
+                if ($info.versjon -and ([version]$info.versjon -gt $script:lokalPakkeVersjon)) {
+                    # Samme EMI-versjon i pakken = bare makroer/ikoner/beskrivelser
+                    # er nye: hentes stille, uten knapp og omstart (2.9.5.0).
+                    # Excel-filene endres ikke - det skjer forst nar brukeren
+                    # trykker "Oppdater" pa en makro.
+                    $sammeEmi = $false
+                    try { $sammeEmi = ($info.emi -and ([version]$info.emi -eq [version]$LauncherVersion)) } catch { }
+                    $script:nyPakke = $info
+                    if ($sammeEmi) { $script:stilleOppdatering = $true } else { Vis-OppdateringTilgjengelig -Info $info }
+                }
             } catch { }
             try { $script:oppdKlient.Dispose() } catch { }
+            if ($script:stilleOppdatering) { $script:stilleOppdatering = $false; Installer-Oppdatering -Stille }
         })
         $script:oppdTimer.Start()
     } catch { }
 }
 
 function Installer-Oppdatering {
+    # -Stille: pakken har samme EMI-versjon som den som kjorer, sa bare
+    # makrofiler, ikoner og beskrivelser byttes - uten sporsmal, uten omstart,
+    # og exe-en rores ikke. Listene lastes inn pa nytt etterpa.
+    param([switch]$Stille)
     $info = $script:nyPakke
     if (-not $info) { return }
     if (Test-InstallKoAktiv) {
-        [System.Windows.Forms.MessageBox]::Show("Vent til makroinstallasjonene som kjorer er ferdige, og prov igjen.", "Oppdater EMI", "OK", "Information") | Out-Null
+        if (-not $Stille) {
+            [System.Windows.Forms.MessageBox]::Show("Vent til makroinstallasjonene som kjorer er ferdige, og prov igjen.", "Oppdater EMI", "OK", "Information") | Out-Null
+        }
         return
     }
-    $endringer = if ($info.endringer) { "`r`n`r`nNytt i denne versjonen:`r`n" + $info.endringer } else { "" }
-    $svar = [System.Windows.Forms.MessageBox]::Show(
-        "Versjon $($info.versjon) av Excel Macro Installer er tilgjengelig.$endringer`r`n`r`nEMI laster ned oppdateringen, erstatter programfilene og starter seg selv på nytt. Listen over dine filer og installerte makroer berøres ikke. Excel-filene dine endres ikke - bruk «Oppdater» på hver fil etterpå hvis en makro har fått ny versjon.`r`n`r`nOppdatere nå?",
-        "Oppdater EMI", "YesNo", "Question")
-    if ($svar -ne [System.Windows.Forms.DialogResult]::Yes) { return }
-
-    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-    $cmdOppdater.Enabled = $false
-    $lblStatusBunn.Text = "Laster ned oppdatering ..."
+    if (-not $Stille) {
+        $endringer = if ($info.endringer) { "`r`n`r`nNytt i denne versjonen:`r`n" + $info.endringer } else { "" }
+        $svar = [System.Windows.Forms.MessageBox]::Show(
+            "Versjon $($info.versjon) av Excel Macro Installer er tilgjengelig.$endringer`r`n`r`nEMI laster ned oppdateringen, erstatter programfilene og starter seg selv på nytt. Listen over dine filer og installerte makroer berøres ikke. Excel-filene dine endres ikke - bruk «Oppdater» på hver fil etterpå hvis en makro har fått ny versjon.`r`n`r`nOppdatere nå?",
+            "Oppdater EMI", "YesNo", "Question")
+        if ($svar -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        $cmdOppdater.Enabled = $false
+    }
+    $lblStatusBunn.Text = if ($Stille) { "Henter nye makroversjoner ..." } else { "Laster ned oppdatering ..." }
     $arbeid = Join-Path ([System.IO.Path]::GetTempPath()) "EMI-oppdatering"
     $utfort = New-Object System.Collections.Generic.List[object]   # for tilbakerulling
     try {
@@ -1257,6 +1274,7 @@ function Installer-Oppdatering {
         foreach ($fil in $kildeFiler) {
             $rel = $fil.FullName.Substring($rot.Length).TrimStart('\')
             if ($rel -notmatch $script:OppdateringHviteliste) { continue }
+            if ($Stille -and $rel -eq "Excel Macro Installer.exe") { continue }
             $maal = Join-Path $basisMappe $rel
             if (Test-Path -LiteralPath $maal) {
                 $likt = (Get-FileHash -LiteralPath $maal -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $fil.FullName -Algorithm SHA256).Hash
@@ -1273,6 +1291,22 @@ function Installer-Oppdatering {
             Copy-Item -LiteralPath $fil.FullName -Destination $maal -Force
         }
 
+        if ($Stille) {
+            # 4a) Ingen omstart: rydd *.gammel (filene er ikke i bruk), oppdater
+            #     versjonen i minnet og bygg listene pa nytt, sa nye makro-
+            #     versjoner vises som "tilgjengelig" med en gang.
+            foreach ($steg in $utfort) {
+                if ($steg.Gammel) { try { Remove-Item -LiteralPath $steg.Gammel -Force -ErrorAction Stop } catch { } }
+            }
+            $script:lokalPakkeVersjon = [version]$pakkeVersjon
+            $script:nyPakke = $null
+            $script:makroer = Hent-Makroliste
+            $script:metadata = Hent-Metadata
+            Last-MakroerFane
+            Last-FilerFane
+            return
+        }
+
         # 4) Start den nye versjonen og lukk denne.
         $lblStatusBunn.Text = "Ferdig - starter på nytt ..."
         Start-Process (Join-Path $basisMappe "Excel Macro Installer.exe")
@@ -1286,6 +1320,10 @@ function Installer-Oppdatering {
                 if (Test-Path -LiteralPath $steg.Maal) { Remove-Item -LiteralPath $steg.Maal -Force }
                 if ($steg.Gammel -and (Test-Path -LiteralPath $steg.Gammel)) { Move-Item -LiteralPath $steg.Gammel -Destination $steg.Maal }
             } catch { }
+        }
+        if ($Stille) {
+            $lblStatusBunn.Text = "Kunne ikke hente nye makroversjoner nå - prøver igjen ved neste oppstart."
+            return
         }
         $form.Cursor = [System.Windows.Forms.Cursors]::Default
         $cmdOppdater.Enabled = $true
