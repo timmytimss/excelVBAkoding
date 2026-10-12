@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.12.1",
+    "versjon":  "2026.10.12.2",
     "dato":  "2026-10-12",
-    "emi":  "2.9.0.0",
-    "endringer":  "Ny makro Katalogmekker (prototype): lager kontaktfil (.vcf) fra en tabell. Makromeny 2.8.0 viser den."
+    "emi":  "2.9.1.0",
+    "endringer":  "Oppdateringsknappen er oransje og dekkes ikke lenger av statusteksten."
 }
