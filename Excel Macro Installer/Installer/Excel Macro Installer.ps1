@@ -56,7 +56,7 @@ public class DpiFix {
 # gang programmet rekompileres - selvoppdaterings-sjekken lenger nede
 # sammenligner disse to (bakt-inn-versjon vs. fersk lest fra .exe-fila pa
 # disk) for a varsle om en nyere versjon ligger klar.
-$LauncherVersion = "2.9.1.0"
+$LauncherVersion = "2.9.2.0"
 
 # Kjort som kompilert .exe (ps2exe, GUI-undersystem - ingen konsoll/
 # terminal-vindu i det hele tatt, uansett Windows sine Terminal-
@@ -101,6 +101,12 @@ if (-not (Test-Path $dataMappe)) { New-Item -ItemType Directory -Path $dataMappe
 # publiserte pakke alltid tilbys.
 $script:OppdateringRepo = "timmytimss/excelVBAkoding"
 $script:OppdateringVersjonUrl = "https://raw.githubusercontent.com/$($script:OppdateringRepo)/main/Excel%20Macro%20Installer/versjon.json"
+# Forstevalg for versjonssjekken (2.9.2.0): GitHubs API svarer med fila slik
+# den er pa main na (hoyst ca. 60 s gammel). raw.githubusercontent (over)
+# mellomlagrer i opptil 5 min OG ignorerer ?t=-parameteren, sa en ny pakke ble
+# ofte ikke sett ved forste oppstart etter publisering. raw brukes bare som
+# reserve hvis API-et svarer med feil (f.eks. grensen pa 60 kall/time per IP).
+$script:OppdateringVersjonApiUrl = "https://api.github.com/repos/$($script:OppdateringRepo)/contents/Excel%20Macro%20Installer/versjon.json?ref=main"
 # Hviteliste over filer (relativt til "Excel Macro Installer\") som en
 # oppdatering har lov a skrive. Alt annet i repo-zipen ignoreres.
 $script:OppdateringHviteliste = '^(Excel Macro Installer\.exe|versjon\.json|Data\\macro-metadata\.json|Macros\\[^\\]+\.ps1|Resources\\.+)$'
@@ -1123,19 +1129,30 @@ function Start-OppdateringSjekk {
     try {
         $script:oppdKlient = Ny-HttpKlient
         $script:oppdKlient.Timeout = [TimeSpan]::FromSeconds(8)
-        # Tidsstempel i URL-en omgar mellomlagring hos proxyer (raw.githubusercontent
-        # har i tillegg ca. 5 min egen cache - helt greit her).
-        $script:oppdTask = $script:oppdKlient.GetStringAsync($script:OppdateringVersjonUrl + "?t=" + [DateTime]::UtcNow.Ticks)
+        # "raw"-mediatypen gir selve filinnholdet fra API-et (ikke JSON-metadata).
+        # raw.githubusercontent bryr seg ikke om Accept-headeren, sa samme klient
+        # kan brukes til reservekallet.
+        $script:oppdKlient.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github.raw+json")
+        $script:oppdReserveBrukt = $false
+        $script:oppdTask = $script:oppdKlient.GetStringAsync($script:OppdateringVersjonApiUrl)
         $script:oppdTimer = New-Object System.Windows.Forms.Timer
         $script:oppdTimer.Interval = 250
         $script:oppdTimer.Add_Tick({
             if (-not $script:oppdTask.IsCompleted) { return }
-            $script:oppdTimer.Stop()
+            $info = $null
             try {
                 if ($script:oppdTask.Status -eq [System.Threading.Tasks.TaskStatus]::RanToCompletion) {
                     $info = $script:oppdTask.Result | ConvertFrom-Json
-                    if ($info.versjon -and ([version]$info.versjon -gt $script:lokalPakkeVersjon)) { Vis-OppdateringTilgjengelig -Info $info }
                 }
+            } catch { $info = $null }
+            if (-not $info.versjon -and -not $script:oppdReserveBrukt) {
+                # API-et feilet - prov raw.githubusercontent en gang (timeren gar videre).
+                $script:oppdReserveBrukt = $true
+                try { $script:oppdTask = $script:oppdKlient.GetStringAsync($script:OppdateringVersjonUrl); return } catch { }
+            }
+            $script:oppdTimer.Stop()
+            try {
+                if ($info.versjon -and ([version]$info.versjon -gt $script:lokalPakkeVersjon)) { Vis-OppdateringTilgjengelig -Info $info }
             } catch { }
             try { $script:oppdKlient.Dispose() } catch { }
         })

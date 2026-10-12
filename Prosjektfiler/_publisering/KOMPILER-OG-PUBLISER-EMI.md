@@ -50,4 +50,5 @@ Remove-Item $kl -Recurse -Force
 
 ## Ventende jobb
 
-Ingen. (Sist: EMI 2.9.1.0, publisert 2026-10-12 som pakke `2026.10.12.2`.)
+- **EMI 2.9.2.0** (kilde endret 2026-10-12): versjonssjekken bruker GitHubs API i stedet for raw.githubusercontent
+  (som mellomlagret i 5 min). `-Endringer "Oppdateringer oppdages med en gang etter publisering."`
