@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.12.6",
+    "versjon":  "2026.10.12.7",
     "dato":  "2026-10-12",
-    "emi":  "2.9.3.0",
-    "endringer":  "Oppdateringsknappen viser den nye versjonen; versjonsnummeret oppe til høyre er alltid grått."
+    "emi":  "2.9.4.0",
+    "endringer":  "Oppdateringsknappen viser den nye versjonen på samme linje som «Oppdater EMI»."
 }
