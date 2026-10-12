@@ -50,4 +50,5 @@ Remove-Item $kl -Recurse -Force
 
 ## Ventende jobb
 
-Ingen. (Sist: EMI 2.9.2.0, publisert 2026-10-12 som pakke `2026.10.12.4`.)
+- **EMI 2.9.3.0** (kilde endret 2026-10-12): oppdateringsknappen viser den nye versjonen i en mindre linje,
+  toppteksten er alltid grå med gjeldende versjon. `-Endringer "Oppdateringsknappen viser den nye versjonen; versjonsnummeret oppe til høyre er alltid grått."`

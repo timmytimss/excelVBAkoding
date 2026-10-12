@@ -56,7 +56,7 @@ public class DpiFix {
 # gang programmet rekompileres - selvoppdaterings-sjekken lenger nede
 # sammenligner disse to (bakt-inn-versjon vs. fersk lest fra .exe-fila pa
 # disk) for a varsle om en nyere versjon ligger klar.
-$LauncherVersion = "2.9.2.0"
+$LauncherVersion = "2.9.3.0"
 
 # Kjort som kompilert .exe (ps2exe, GUI-undersystem - ingen konsoll/
 # terminal-vindu i det hele tatt, uansett Windows sine Terminal-
@@ -852,7 +852,9 @@ function Sett-VersjonToppTekst {
     $script:lblVersjonTopp.Font = $Font
     $script:lblVersjonTopp.ForeColor = $Farge
     $maalt = [System.Windows.Forms.TextRenderer]::MeasureText($Tekst, $Font)
-    $script:lblVersjonTopp.Width = $maalt.Width + 4
+    # Romslig margin: med +4 ble siste bokstav klippet (Label har egen
+    # innvendig luft som TextRenderer ikke regner med).
+    $script:lblVersjonTopp.Width = $maalt.Width + 14
     $script:lblVersjonTopp.Height = $maalt.Height
     $script:lblVersjonTopp.Left = $form.ClientSize.Width - $sideMargin - $script:lblVersjonTopp.Width
 }
@@ -1101,7 +1103,28 @@ try {
 # runspacet). Svarer ikke GitHub innen 8 s (ingen nett, proxy e.l.) skjer
 # ingenting - EMI fungerer som for. Knappen vises kun nar en nyere pakke finnes.
 $script:nyPakke = $null
-$cmdOppdater = Ny-Knapp -Tekst "Ny versjon – oppdater EMI" -Stil "oransje" -Hoyde 34
+# To linjer i knappen (2.9.3.0): "Oppdater EMI" + en mindre linje med den nye
+# versjonen. En Button kan bare ha EN font, sa teksten tegnes i Paint (Text er
+# tom). Toppteksten viser alltid bare gjeldende versjon i gratt.
+$script:oppdLinje1 = "Oppdater EMI"
+$script:oppdLinje2 = ""
+$script:oppdFontLiten = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$cmdOppdater = Ny-Knapp -Tekst $script:oppdLinje1 -Stil "oransje" -Bredde 170 -Hoyde 34
+$cmdOppdater.Text = ""
+$cmdOppdater.AccessibleName = $script:oppdLinje1
+$cmdOppdater.Add_Paint({
+    param($s, $e)
+    $flagg = [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::NoPadding
+    $h1 = [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje1, $s.Font).Height
+    $h2 = if ($script:oppdLinje2) { [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje2, $script:oppdFontLiten).Height - 2 } else { 0 }
+    $y = [int](($s.Height - $h1 - $h2) / 2)
+    [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $script:oppdLinje1, $s.Font,
+        (New-Object System.Drawing.Rectangle(0, $y, $s.Width, $h1)), [System.Drawing.Color]::White, $flagg)
+    if ($script:oppdLinje2) {
+        [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $script:oppdLinje2, $script:oppdFontLiten,
+            (New-Object System.Drawing.Rectangle(0, ($y + $h1 - 2), $s.Width, $h2 + 2)), [System.Drawing.Color]::FromArgb(255, 237, 213), $flagg)
+    }
+})
 $cmdOppdater.Left = $cmdStartNytt.Left - 10 - $cmdOppdater.Width; $cmdOppdater.Top = $form.ClientSize.Height - $bottomH + 13
 $cmdOppdater.Visible = $false
 # Statusteksten nederst skal slutte FOR knappene - den har hvit bakgrunn og
@@ -1120,8 +1143,19 @@ function Ny-HttpKlient {
 function Vis-OppdateringTilgjengelig {
     param($Info)
     $script:nyPakke = $Info
-    Sett-VersjonToppTekst -Tekst "v$LauncherVersion — ny versjon tilgjengelig" -Font (New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)) -Farge $script:FargeOransjePrikk
+    # Ny EMI-versjon: vis den. Bare nye makroer/filer (samme EMI): vis pakken.
+    $nyEmi = $null
+    try { if ($Info.emi -and ([version]$Info.emi -gt [version]$LauncherVersion)) { $nyEmi = $Info.emi } } catch { }
+    if ($nyEmi) { $script:oppdLinje2 = "Ny versjon v$nyEmi" } else { $script:oppdLinje2 = "Ny pakke $($Info.versjon)" }
+    $bredde = [Math]::Max([System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje1, $cmdOppdater.Font).Width,
+                          [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje2, $script:oppdFontLiten).Width) + 32
+    $cmdOppdater.Width = [Math]::Max(150, $bredde)
+    Set-RundedeHjorner -Ctrl $cmdOppdater -Radius 6
+    $cmdOppdater.AccessibleName = "$($script:oppdLinje1) - $($script:oppdLinje2)"
+    $cmdOppdater.Left = $cmdStartNytt.Left - 10 - $cmdOppdater.Width
+    $lblStatusBunn.Width = [Math]::Max(100, $cmdOppdater.Left - 12 - $lblStatusBunn.Left)
     $cmdOppdater.Visible = $true
+    $cmdOppdater.Invalidate()
 }
 
 function Start-OppdateringSjekk {
