@@ -1,0 +1,118 @@
+# Bygger "Excel Macro Installer.exe" pa en Windows-maskin hos GitHub og
+# publiserer den som ny EMI-pakke, hver gang EMI-kilden endres pa main.
+# Da trenger ingen a kompilere med ps2exe pa egen PC: brukerne far den nye
+# exe-en via "Oppdater EMI"-knappen som for alle andre oppdateringer.
+#
+# Regler (se CLAUDE.md og Prosjektfiler/_publisering/KOMPILER-OG-PUBLISER-EMI.md):
+# - $LauncherVersion i kilden MA bumpes ved hver endring, ellers stopper jobben.
+# - Er exe-en allerede pa samme versjon som kilden, gjor jobben ingenting.
+# - Endringsteksten i versjon.json hentes fra en linje "Endringer: ..." i
+#   commit-meldingen, ellers fra forste linje.
+name: Bygg og publiser EMI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Excel Macro Installer/Installer/Excel Macro Installer.ps1"
+      - ".github/workflows/bygg-emi.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bygg-emi
+  cancel-in-progress: false
+
+jobs:
+  bygg:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sjekk versjoner
+        id: versjon
+        shell: powershell
+        env:
+          FORRIGE: ${{ github.event.before }}
+        run: |
+          $emi = Join-Path $env:GITHUB_WORKSPACE "Excel Macro Installer"
+          $kilde = Get-Content -Raw -Encoding UTF8 (Join-Path $emi "Installer\Excel Macro Installer.ps1")
+          $v = ([regex]::Match($kilde, '\$LauncherVersion\s*=\s*"([^"]+)"')).Groups[1].Value
+          $exeV = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $emi "Excel Macro Installer.exe")).FileVersion
+          "Kilde: $v  Exe: $exeV"
+          [void][ScriptBlock]::Create($kilde)
+          if ($v -eq $exeV) {
+            # Endret kilden seg i denne pushen uten at versjonen ble bumpet?
+            $endret = $false
+            if ($env:FORRIGE -and $env:FORRIGE -notmatch '^0+$') {
+              git diff --quiet $env:FORRIGE HEAD -- "Excel Macro Installer/Installer/Excel Macro Installer.ps1"
+              $endret = ($LASTEXITCODE -eq 1)
+            }
+            if ($endret) { throw "EMI-kilden er endret, men `$LauncherVersion ($v) er ikke bumpet. Bump den og push på nytt." }
+            "Exe er allerede $v - ingenting å bygge."
+            "bygg=nei" | Out-File -Append -Encoding ascii $env:GITHUB_OUTPUT
+          } else {
+            "bygg=ja" | Out-File -Append -Encoding ascii $env:GITHUB_OUTPUT
+            "versjon=$v" | Out-File -Append -Encoding ascii $env:GITHUB_OUTPUT
+          }
+
+      - name: Installer ps2exe
+        if: steps.versjon.outputs.bygg == 'ja'
+        shell: powershell
+        run: |
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module ps2exe -Scope CurrentUser -Force
+          (Get-Module -ListAvailable ps2exe | Select-Object -First 1).Version.ToString()
+
+      - name: Kompiler
+        if: steps.versjon.outputs.bygg == 'ja'
+        shell: powershell
+        run: |
+          $emi = Join-Path $env:GITHUB_WORKSPACE "Excel Macro Installer"
+          $v = "${{ steps.versjon.outputs.versjon }}"
+          $exe = Join-Path $emi "Excel Macro Installer.exe"
+          Import-Module ps2exe
+          # -noConsole er essensielt (se gotcha g-emi-w1-terminal-problemet).
+          Invoke-ps2exe -inputFile (Join-Path $emi "Installer\Excel Macro Installer.ps1") -outputFile $exe `
+            -iconFile (Join-Path $emi "Resources\icon.ico") -noConsole -STA `
+            -title "Excel Macro Installer" -company ("H" + [char]0x00E5 + "kon") -version $v
+          $fv = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe).FileVersion
+          if ($fv -ne $v) { throw "Exe har versjon $fv, forventet $v" }
+          "Kompilert $fv ($((Get-Item $exe).Length) byte)"
+
+      - name: Royktest (starter og kjorer i 10 s uten a krasje)
+        if: steps.versjon.outputs.bygg == 'ja'
+        shell: powershell
+        run: |
+          # Klonen har Installer\ ved siden av exe-en og regnes som utviklingskopi,
+          # sa den ser ikke etter oppdateringer under testen.
+          $p = Start-Process (Join-Path $env:GITHUB_WORKSPACE "Excel Macro Installer\Excel Macro Installer.exe") -PassThru
+          Start-Sleep -Seconds 10
+          if ($p.HasExited) { throw "EMI avsluttet seg selv under royktesten (exit $($p.ExitCode))." }
+          Stop-Process -Id $p.Id -Force
+          "EMI startet og kjorte i 10 s."
+
+      - name: Commit exe og publiser pakke
+        if: steps.versjon.outputs.bygg == 'ja'
+        shell: powershell
+        env:
+          COMMIT_MELDING: ${{ github.event.head_commit.message }}
+        run: |
+          $v = "${{ steps.versjon.outputs.versjon }}"
+          $linjer = @("$env:COMMIT_MELDING" -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          $endr = ($linjer | Where-Object { $_ -match '^Endringer:\s*(.+)$' } | Select-Object -First 1) -replace '^Endringer:\s*', ''
+          if (-not $endr) { $endr = if ($linjer.Count) { $linjer[0] } else { "Ny versjon av EMI ($v)." } }
+          git config user.name "timmytimss"
+          git config user.email "timmytimss@users.noreply.github.com"
+          git add -- "Excel Macro Installer/Excel Macro Installer.exe"
+          git commit -m "EMI ${v}: kompilert exe (GitHub Actions)"
+          if ($LASTEXITCODE -ne 0) { throw "git commit feilet" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "git push feilet" }
+          powershell -ExecutionPolicy Bypass -File (Join-Path $env:GITHUB_WORKSPACE "Prosjektfiler\_publisering\Publiser-EMI.ps1") -Repo $env:GITHUB_WORKSPACE -Endringer $endr
+          if ($LASTEXITCODE -ne 0) { throw "Publiser-EMI feilet" }
