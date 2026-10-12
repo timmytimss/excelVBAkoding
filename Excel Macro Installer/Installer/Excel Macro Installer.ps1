@@ -56,7 +56,7 @@ public class DpiFix {
 # gang programmet rekompileres - selvoppdaterings-sjekken lenger nede
 # sammenligner disse to (bakt-inn-versjon vs. fersk lest fra .exe-fila pa
 # disk) for a varsle om en nyere versjon ligger klar.
-$LauncherVersion = "2.9.3.0"
+$LauncherVersion = "2.9.4.0"
 
 # Kjort som kompilert .exe (ps2exe, GUI-undersystem - ingen konsoll/
 # terminal-vindu i det hele tatt, uansett Windows sine Terminal-
@@ -1103,26 +1103,29 @@ try {
 # runspacet). Svarer ikke GitHub innen 8 s (ingen nett, proxy e.l.) skjer
 # ingenting - EMI fungerer som for. Knappen vises kun nar en nyere pakke finnes.
 $script:nyPakke = $null
-# To linjer i knappen (2.9.3.0): "Oppdater EMI" + en mindre linje med den nye
-# versjonen. En Button kan bare ha EN font, sa teksten tegnes i Paint (Text er
+# Knappen viser "Oppdater EMI" + den nye versjonen i mindre skrift pa samme
+# linje. En Button kan bare ha EN font, sa teksten tegnes i Paint (Text er
 # tom). Toppteksten viser alltid bare gjeldende versjon i gratt.
 $script:oppdLinje1 = "Oppdater EMI"
 $script:oppdLinje2 = ""
-$script:oppdFontLiten = New-Object System.Drawing.Font("Segoe UI", 7.5)
+$script:oppdFontLiten = New-Object System.Drawing.Font("Segoe UI", 8)
 $cmdOppdater = Ny-Knapp -Tekst $script:oppdLinje1 -Stil "oransje" -Bredde 170 -Hoyde 34
 $cmdOppdater.Text = ""
 $cmdOppdater.AccessibleName = $script:oppdLinje1
 $cmdOppdater.Add_Paint({
     param($s, $e)
-    $flagg = [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::NoPadding
-    $h1 = [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje1, $s.Font).Height
-    $h2 = if ($script:oppdLinje2) { [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje2, $script:oppdFontLiten).Height - 2 } else { 0 }
-    $y = [int](($s.Height - $h1 - $h2) / 2)
-    [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $script:oppdLinje1, $s.Font,
-        (New-Object System.Drawing.Rectangle(0, $y, $s.Width, $h1)), [System.Drawing.Color]::White, $flagg)
-    if ($script:oppdLinje2) {
-        [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $script:oppdLinje2, $script:oppdFontLiten,
-            (New-Object System.Drawing.Rectangle(0, ($y + $h1 - 2), $s.Width, $h2 + 2)), [System.Drawing.Color]::FromArgb(255, 237, 213), $flagg)
+    # En linje: "Oppdater EMI" i fet skrift + den nye versjonen i mindre, lysere
+    # skrift rett etter, bunnjustert slik at de star pa samme linje (2.9.4.0).
+    $flagg = [System.Windows.Forms.TextFormatFlags]::NoPadding -bor [System.Windows.Forms.TextFormatFlags]::SingleLine
+    $m1 = [System.Windows.Forms.TextRenderer]::MeasureText($e.Graphics, $script:oppdLinje1, $s.Font, [System.Drawing.Size]::Empty, $flagg)
+    $tillegg = if ($script:oppdLinje2) { "  " + $script:oppdLinje2 } else { "" }
+    $m2 = if ($tillegg) { [System.Windows.Forms.TextRenderer]::MeasureText($e.Graphics, $tillegg, $script:oppdFontLiten, [System.Drawing.Size]::Empty, $flagg) } else { [System.Drawing.Size]::Empty }
+    $x = [int](($s.Width - $m1.Width - $m2.Width) / 2)
+    $y1 = [int](($s.Height - $m1.Height) / 2)
+    [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $script:oppdLinje1, $s.Font, (New-Object System.Drawing.Point($x, $y1)), [System.Drawing.Color]::White, $flagg)
+    if ($tillegg) {
+        $y2 = $y1 + $m1.Height - $m2.Height - 1
+        [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $tillegg, $script:oppdFontLiten, (New-Object System.Drawing.Point(($x + $m1.Width), $y2)), [System.Drawing.Color]::FromArgb(255, 237, 213), $flagg)
     }
 })
 $cmdOppdater.Left = $cmdStartNytt.Left - 10 - $cmdOppdater.Width; $cmdOppdater.Top = $form.ClientSize.Height - $bottomH + 13
@@ -1146,9 +1149,10 @@ function Vis-OppdateringTilgjengelig {
     # Ny EMI-versjon: vis den. Bare nye makroer/filer (samme EMI): vis pakken.
     $nyEmi = $null
     try { if ($Info.emi -and ([version]$Info.emi -gt [version]$LauncherVersion)) { $nyEmi = $Info.emi } } catch { }
-    if ($nyEmi) { $script:oppdLinje2 = "Ny versjon v$nyEmi" } else { $script:oppdLinje2 = "Ny pakke $($Info.versjon)" }
-    $bredde = [Math]::Max([System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje1, $cmdOppdater.Font).Width,
-                          [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje2, $script:oppdFontLiten).Width) + 32
+    if ($nyEmi) { $script:oppdLinje2 = "v$nyEmi" } else { $script:oppdLinje2 = "pakke $($Info.versjon)" }
+    $flagg = [System.Windows.Forms.TextFormatFlags]::NoPadding -bor [System.Windows.Forms.TextFormatFlags]::SingleLine
+    $bredde = [System.Windows.Forms.TextRenderer]::MeasureText($script:oppdLinje1, $cmdOppdater.Font, [System.Drawing.Size]::Empty, $flagg).Width +
+              [System.Windows.Forms.TextRenderer]::MeasureText("  " + $script:oppdLinje2, $script:oppdFontLiten, [System.Drawing.Size]::Empty, $flagg).Width + 36
     $cmdOppdater.Width = [Math]::Max(150, $bredde)
     Set-RundedeHjorner -Ctrl $cmdOppdater -Radius 6
     $cmdOppdater.AccessibleName = "$($script:oppdLinje1) - $($script:oppdLinje2)"
