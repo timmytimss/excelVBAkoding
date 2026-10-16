@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.16.2",
+    "versjon":  "2026.10.16.3",
     "dato":  "2026-10-16",
     "emi":  "2.9.5.0",
-    "endringer":  "Mail-utsender 0.21.1: «Velg»-knappen for mal-fil vises også når stien er lang."
+    "endringer":  "Mail-utsender 0.21.2: ugyldige mottakere hoppes over med beskjed i stedet for å stoppe utsendelsen."
 }

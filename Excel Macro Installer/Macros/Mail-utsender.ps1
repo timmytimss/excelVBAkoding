@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeSendMail/formCodeOppsett) - se excel-vba-installer-pattern i
 # minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$GeneriskVersion = "0.21.1"
+$GeneriskVersion = "0.21.2"
 
 # ============================================================
 # Mail-utsender - alt-i-en installer/oppdaterer.
@@ -899,6 +899,29 @@ Public Function BygMailForRad(ByVal radNr As Long, ByRef olMail As Object, ByRef
     If Len(avsenderValgt) > 0 Then SettAvsender olApp, olMail, avsenderValgt
 
     LeggVedVedlegg olMail
+
+    ' Sjekk at Outlook kjenner igjen ALLE mottakere for mailen sendes
+    ' (0.21.2). Et ugyldig navn i e-post-/CC-kolonnen, eller en mottaker som
+    ' er lagret i selve mal-fila (.msg beholder To/CC/BCC fra malen), ga
+    ' ellers "Outlook does not recognize one or more names" ved .Send og
+    ' stoppet hele masse-sendingen midt i. Na hoppes bare raden over, med
+    ' navnet som ikke ble kjent igjen.
+    Dim rcp As Object, ukjente As String
+    On Error Resume Next
+    olMail.Recipients.ResolveAll
+    For Each rcp In olMail.Recipients
+        If Not rcp.Resolved Then ukjente = ukjente & """" & rcp.Name & """, "
+    Next rcp
+    On Error GoTo 0
+    If Len(ukjente) > 0 Then
+        ukjente = Left(ukjente, Len(ukjente) - 2)
+        feilmelding = "Outlook kjenner ikke igjen mottaker " & ukjente & _
+            " (sjekk e-post-/CC-kolonnen, og om mal-fila har lagrede mottakere)."
+        On Error Resume Next
+        olMail.Close 1 ' olDiscard
+        On Error GoTo 0
+        Exit Function
+    End If
 
     Dim leveringFeil As String, leveringstid As Variant
     leveringstid = BeregnLeveringstidspunkt(leveringFeil)
@@ -2453,9 +2476,25 @@ Private Sub cmdSendTilAlle_Click()
             DoEvents
 
             If modGenerisk.BygMailForRad(ekteRad, olMail, feilmelding) Then
+                ' En feil ved selve sendingen skal bare hoppe over raden,
+                ' ikke stoppe hele utsendelsen med en VBA-feildialog (0.21.2).
+                Dim sendFeil As String
+                sendFeil = ""
+                On Error Resume Next
                 olMail.Send
-                If colStatus > 0 Then modGenerisk.StatusMarkerSendt tbl.DataBodyRange.Cells(ekteRad, colStatus)
-                antallSendt = antallSendt + 1
+                If Err.Number <> 0 Then sendFeil = Err.Description
+                Err.Clear
+                On Error GoTo 0
+                If sendFeil = "" Then
+                    If colStatus > 0 Then modGenerisk.StatusMarkerSendt tbl.DataBodyRange.Cells(ekteRad, colStatus)
+                    antallSendt = antallSendt + 1
+                Else
+                    On Error Resume Next
+                    olMail.Close 1 ' olDiscard
+                    On Error GoTo 0
+                    antallHoppetOver = antallHoppetOver + 1
+                    hoppOverMelding = hoppOverMelding & "Rad " & ekteRad & ": Outlook kunne ikke sende (" & sendFeil & ")" & vbCrLf
+                End If
             Else
                 antallHoppetOver = antallHoppetOver + 1
                 hoppOverMelding = hoppOverMelding & "Rad " & ekteRad & ": " & feilmelding & vbCrLf
