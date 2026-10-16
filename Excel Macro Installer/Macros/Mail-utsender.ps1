@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeSendMail/formCodeOppsett) - se excel-vba-installer-pattern i
 # minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$GeneriskVersion = "0.20.1"
+$GeneriskVersion = "0.21.0"
 
 # ============================================================
 # Mail-utsender - alt-i-en installer/oppdaterer.
@@ -88,6 +88,10 @@ Option Explicit
 Public Const GENERISK_VERSION As String = "{{VERSION}}"
 
 Private Const KONFIG_FANENAVN As String = "MailKonfig"
+' Teksten som skrives i statuskolonnen nar en mail er sendt - i BEGGE
+' retninger (0.21.0, Håkons ønske: "det skal alltid stå Sendt i en rad
+' der mail har blitt sendt").
+Public Const STATUS_SENDT_TEKST As String = "Sendt"
 Public Const MAKS_PLASSHOLDERE As Long = 8
 
 ' Husker hvilket vindu Oppsett ble apnet fra ("frmSendMail" eller
@@ -622,17 +626,21 @@ Public Function StatusTekst() As String
 End Function
 
 Public Function StatusRadKlasse(ByVal statusVerdi As String) As String
-    ' Returnerer "AKTUELL" (gjenstår - skal vises/sendes), "SENDT" (ferdig
-    ' behandlet) eller "FEIL" (uventet innhold - verken tomt eller den
-    ' gjeldende teksten). Hvilken verdi som betyr hva avhenger av retningen.
+    ' Returnerer "AKTUELL" (gjenstår - skal vises/sendes), "SENDT" (står
+    ' "Sendt"), "IKKE_VALGT" (omvendt retning: tom celle = ikke valgt for
+    ' sending) eller "FEIL" (uventet innhold). Fra 0.21.0 skrives alltid
+    ' "Sendt" ved sending. Den valgte teksten regnes fortsatt som sendt i
+    ' normal retning, fordi eldre versjoner skrev den inn der.
     Dim v As String, tekst As String
     v = Trim(statusVerdi)
     tekst = StatusTekst()
-    If StatusOmvendtModus() Then
+    If LCase(v) = LCase(STATUS_SENDT_TEKST) Then
+        StatusRadKlasse = "SENDT"
+    ElseIf StatusOmvendtModus() Then
         If LCase(v) = LCase(tekst) Then
             StatusRadKlasse = "AKTUELL"
         ElseIf v = "" Then
-            StatusRadKlasse = "SENDT"
+            StatusRadKlasse = "IKKE_VALGT"
         Else
             StatusRadKlasse = "FEIL"
         End If
@@ -652,22 +660,14 @@ Public Function StatusRadErAktuell(ByVal statusVerdi As String) As Boolean
 End Function
 
 Public Sub StatusMarkerSendt(ByVal celle As Range)
-    ' Kalles etter en bekreftet sending - skriver teksten inn (normal
-    ' retning) eller fjerner den igjen (omvendt retning).
-    If StatusOmvendtModus() Then
-        celle.Value = ""
-    Else
-        celle.Value = StatusTekst()
-    End If
+    ' Kalles etter en bekreftet sending - skriver alltid "Sendt", uansett
+    ' retning (0.21.0; for: teksten i normal retning, tom celle i omvendt).
+    celle.Value = STATUS_SENDT_TEKST
 End Sub
 
 Public Function StatusSendtBeskrivelse() As String
     ' Menneskelesbar tekst til "allerede sendt"-bekreftelsesdialogen.
-    If StatusOmvendtModus() Then
-        StatusSendtBeskrivelse = "tom - teksten er fjernet"
-    Else
-        StatusSendtBeskrivelse = """" & StatusTekst() & """"
-    End If
+    StatusSendtBeskrivelse = """" & STATUS_SENDT_TEKST & """"
 End Function
 
 Public Function StatusSendtLabel() As String
@@ -680,11 +680,10 @@ Public Function StatusSendtLabel() As String
     ' fra hverandre ut fra statuskolonnen alene. Å kalle den "Sendt" ville
     ' derfor vært misvisende (Håkon, 2026-09-23: "denne er ikke helt
     ' riktig" i omvendt modus) - "Ikke aktuelt" er ærlig om usikkerheten.
-    If StatusOmvendtModus() Then
-        StatusSendtLabel = "Ikke aktuelt"
-    Else
-        StatusSendtLabel = "Sendt"
-    End If
+    ' Fra 0.21.0 star det "Sendt" i sendte rader i begge retninger, sa
+    ' etiketten er riktig ogsa i omvendt retning (tomme celler der er
+    ' "IKKE_VALGT" og telles ikke som sendt).
+    StatusSendtLabel = "Sendt"
 End Function
 
 ' --- Feilsjekk (frmFeilsjekk) - under utprovning -----------------------
@@ -1121,6 +1120,8 @@ Private Sub FyllListe()
                     radIndekser(n) = r
                 Case "SENDT"
                     antSendt = antSendt + 1
+                Case "IKKE_VALGT"
+                    ' Omvendt retning, tom celle: ikke valgt for sending.
                 Case Else
                     antFeil = antFeil + 1
             End Select
@@ -1386,10 +1387,14 @@ Private Sub optRetningOmvendt_Click()
 End Sub
 
 Private Sub OppdaterStatusTekstLabel()
+    ' Normal retning trenger ingen egen tekst lenger (sending skriver alltid
+    ' "Sendt"), sa feltet er bare aktivt i omvendt retning.
     If optRetningOmvendt.Value Then
-        lblStatusTekstLabel.Caption = "Tekst som regnes som ""fylt"":"
+        lblStatusTekstLabel.Caption = "Tekst som betyr ""skal sendes"":"
+        txtStatusTekst.Enabled = True
     Else
-        lblStatusTekstLabel.Caption = "Tekst som skrives ved sending:"
+        lblStatusTekstLabel.Caption = "(ikke i bruk i denne retningen)"
+        txtStatusTekst.Enabled = False
     End If
 End Sub
 
@@ -1787,8 +1792,12 @@ Private Sub cmdLagre_Click()
         Exit Sub
     End If
 
-    If Trim(txtStatusTekst.Value) = "" Then
-        MsgBox "Skriv inn hvilken tekst som skal brukes i statuskolonnen.", vbExclamation, "Oppsett"
+    If optRetningOmvendt.Value And Trim(txtStatusTekst.Value) = "" Then
+        MsgBox "Skriv inn hvilken tekst som betyr at en rad skal sendes (f.eks. X).", vbExclamation, "Oppsett"
+        Exit Sub
+    End If
+    If optRetningOmvendt.Value And LCase(Trim(txtStatusTekst.Value)) = LCase(modGenerisk.STATUS_SENDT_TEKST) Then
+        MsgBox "Teksten kan ikke være """ & modGenerisk.STATUS_SENDT_TEKST & """ - det er det som skrives inn når en mail er sendt.", vbExclamation, "Oppsett"
         Exit Sub
     End If
 
@@ -3114,13 +3123,13 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
         $optRetningNormal = $fraEpostStatus.Controls.Add("Forms.OptionButton.1")
         $optRetningNormal.Name = "optRetningNormal"
         $optRetningNormal.GroupName = "StatusRetningGruppe"
-        $optRetningNormal.Caption = "Tomme rader vises - teksten skrives inn når mail sendes"
+        $optRetningNormal.Caption = "Tomme rader vises - ""Sendt"" skrives inn når mail sendes"
         $optRetningNormal.Left = 10; $optRetningNormal.Top = 98; $optRetningNormal.Width = 450; $optRetningNormal.Height = 18
 
         $optRetningOmvendt = $fraEpostStatus.Controls.Add("Forms.OptionButton.1")
         $optRetningOmvendt.Name = "optRetningOmvendt"
         $optRetningOmvendt.GroupName = "StatusRetningGruppe"
-        $optRetningOmvendt.Caption = "Rader med teksten vises - teksten fjernes når mail sendes"
+        $optRetningOmvendt.Caption = "Rader med teksten vises - den byttes til ""Sendt"" når mail sendes"
         $optRetningOmvendt.Left = 10; $optRetningOmvendt.Top = 122; $optRetningOmvendt.Width = 450; $optRetningOmvendt.Height = 18
 
         $lblStatusTekstLabel = $fraEpostStatus.Controls.Add("Forms.Label.1")

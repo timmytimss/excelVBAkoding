@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.12.12",
-    "dato":  "2026-10-12",
+    "versjon":  "2026.10.16.1",
+    "dato":  "2026-10-16",
     "emi":  "2.9.5.0",
-    "endringer":  "Makromeny 2.8.3: hele navnet vises på flisene."
+    "endringer":  "Mail-utsender 0.21.0: det står alltid «Sendt» i statuskolonnen når en mail er sendt."
 }
