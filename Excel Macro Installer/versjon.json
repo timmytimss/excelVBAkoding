@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.16.1",
+    "versjon":  "2026.10.16.2",
     "dato":  "2026-10-16",
     "emi":  "2.9.5.0",
-    "endringer":  "Mail-utsender 0.21.0: det står alltid «Sendt» i statuskolonnen når en mail er sendt."
+    "endringer":  "Mail-utsender 0.21.1: «Velg»-knappen for mal-fil vises også når stien er lang."
 }

@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeSendMail/formCodeOppsett) - se excel-vba-installer-pattern i
 # minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$GeneriskVersion = "0.21.0"
+$GeneriskVersion = "0.21.1"
 
 # ============================================================
 # Mail-utsender - alt-i-en installer/oppdaterer.
@@ -1523,6 +1523,21 @@ Private Sub OppdaterMalfilLayout()
     ' Plasser "Velg"-knappen rett etter filnavn-teksten (som er AutoSize
     ' og dermed skifter bredde med innholdet), og la emne-forhandsvisningen
     ' strekke seg helt bort til samme hoyre kant som brodtekst-boksen under.
+    ' En lang sti forkortes forfra ("...\mappe\fil.msg") slik at knappen
+    ' aldri havner utenfor rammen (0.21.1 - knappen forsvant ved lange
+    ' stier). Hele stien vises som verktoytips.
+    Dim fullTekst As String, maksBredde As Single, k As Long
+    If lblMalFil.ControlTipText = "" Or Left$(lblMalFil.Caption, 3) <> "..." Then
+        lblMalFil.ControlTipText = lblMalFil.Caption
+    End If
+    fullTekst = lblMalFil.ControlTipText
+    lblMalFil.Caption = fullTekst
+    maksBredde = fraMalfil.InsideWidth - lblMalFil.Left - cmdVelgMalFil.Width - 24
+    k = 1
+    Do While lblMalFil.Width > maksBredde And k < Len(fullTekst) - 8
+        k = k + 1
+        lblMalFil.Caption = "..." & Mid$(fullTekst, k)
+    Loop
     cmdVelgMalFil.Left = lblMalFil.Left + lblMalFil.Width + 10
     txtEmne.Left = lblEmneLabel.Left + lblEmneLabel.Width + 8
     txtEmne.Width = (txtBrodtekst.Left + txtBrodtekst.Width) - txtEmne.Left
