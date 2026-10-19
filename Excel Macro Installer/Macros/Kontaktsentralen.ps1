@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.11.0"
+$KtsVersion = "0.12.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -650,6 +650,7 @@ Public Function KjørSkann() As Object
     resultat("AntallNyeMatchet") = 0
     resultat("AntallMatchetViaSamtale") = 0
     resultat("AntallOppdatertRad") = 0
+    resultat("AntallFjernetFraCache") = 0
     Dim konfig As Object: Set konfig = KtsLesKonfig()
     Dim postboksNavn As String
     If konfig.Exists("KTS_POSTBOKS") Then postboksNavn = konfig("KTS_POSTBOKS")
@@ -725,6 +726,12 @@ Public Function KjørSkann() As Object
 
     Dim settDenneSkann As Object: Set settDenneSkann = CreateObject("Scripting.Dictionary")
     Dim mappe As Object
+    ' Mappene som skannes (FolderPath - mer stabil a sammenligne enn
+    ' EntryID), brukt av oppryddingen etter lokken.
+    Dim skannedeMapper As Object: Set skannedeMapper = CreateObject("Scripting.Dictionary")
+    For Each mappe In alleMapper
+        On Error Resume Next: skannedeMapper(LCase(CStr(mappe.FolderPath))) = True: Err.Clear: On Error GoTo Feilhandtering
+    Next mappe
     For Each mappe In alleMapper
         Dim items As Object: Set items = Nothing
         If harStartpunkt Then
@@ -750,6 +757,18 @@ Public Function KjørSkann() As Object
 
                 Dim kategorier As String: kategorier = ""
                 On Error Resume Next: kategorier = Trim(CStr(item.Categories)): On Error GoTo Feilhandtering
+
+                ' Sett i denne skanningen (ogsa uten kategori), sa oppryddingen
+                ' under ikke forveksler den med en flyttet/slettet e-post.
+                If Len(entryId) > 0 Then settDenneSkann(entryId) = True
+                ' Kategorien er fjernet i Outlook siden sist: e-posten skal ikke
+                ' lenger telle med i radens status (0.12.0).
+                If Len(kategorier) = 0 And Len(entryId) > 0 Then
+                    If cache.Exists(entryId) Then
+                        cache.Remove entryId
+                        resultat("AntallFjernetFraCache") = resultat("AntallFjernetFraCache") + 1
+                    End If
+                End If
 
                 If Len(kategorier) > 0 Then
                     resultat("AntallKategorisert") = resultat("AntallKategorisert") + 1
@@ -820,11 +839,41 @@ Public Function KjørSkann() As Object
     ' --- Fjern uavklarte cache-oppforinger som IKKE ble sett i denne
     '     skanningen (e-posten er slettet/flyttet/utenfor startpunkt) -
     '     ellers ville de stat som uavklarte for alltid. ---
+    ' --- Matchede oppforinger som ikke ble sett (0.12.0): sla e-posten opp
+    '     pa ID. Finnes den ikke lenger, er den slettet eller FLYTTET (i en
+    '     Exchange-postboks far en flyttet e-post ny EntryID - den nye kopien
+    '     er allerede plukket opp over hvis den ligger under Innboks, og
+    '     kobles til samme rad via samtalen). Den gamle oppforingen fjernes,
+    '     ellers star den igjen pa raden og gir "flyttet eller slettet" nar
+    '     den apnes. Finnes den (f.eks. eldre enn startpunktet), beholdes den,
+    '     med kategorien slik den er i Outlook na. ---
     Dim fjernListe As New Collection, fjernNokkel As Variant
+    Dim sjekkItem As Object, sjekkKat As String
     For Each ck In cache.Keys
         Set cd = cache(ck)
-        If CLng(cd("RadNr")) <= 0 Then
-            If Not settDenneSkann.Exists(CStr(ck)) Then fjernListe.Add CStr(ck)
+        If Not settDenneSkann.Exists(CStr(ck)) Then
+            If CLng(cd("RadNr")) <= 0 Then
+                fjernListe.Add CStr(ck)
+            Else
+                Set sjekkItem = Nothing
+                sjekkKat = ""
+                On Error Resume Next
+                Set sjekkItem = olNs.GetItemFromID(CStr(ck), CStr(cd("StoreID")))
+                If Not sjekkItem Is Nothing Then
+                    sjekkKat = Trim(CStr(sjekkItem.Categories))
+                    ' Ligger den utenfor Innboks-treet (f.eks. Slettede
+                    ' elementer), regnes den som fjernet.
+                    If Not skannedeMapper.Exists(LCase(CStr(sjekkItem.Parent.FolderPath))) Then sjekkKat = ""
+                End If
+                Err.Clear
+                On Error GoTo Feilhandtering
+                If sjekkItem Is Nothing Or Len(sjekkKat) = 0 Then
+                    fjernListe.Add CStr(ck)
+                    resultat("AntallFjernetFraCache") = resultat("AntallFjernetFraCache") + 1
+                Else
+                    cd("Kategori") = sjekkKat
+                End If
+            End If
         End If
     Next ck
     For Each fjernNokkel In fjernListe
@@ -1257,7 +1306,8 @@ Public Sub KtsAapneMeldingMedId(ByVal entryId As String, ByVal storeId As String
     Set itm = olNs.GetItemFromID(entryId, storeId)
     On Error GoTo EH
     If itm Is Nothing Then
-        MsgBox "Fant ikke e-posten i Outlook (er den flyttet eller slettet?).", vbExclamation, "Kontaktsentralen"
+        MsgBox "Fant ikke e-posten i Outlook - den er flyttet eller slettet siden forrige synkronisering." & vbCrLf & vbCrLf & _
+            "Synkroniser på nytt, så ryddes den bort (og en flyttet e-post dukker opp igjen på riktig rad).", vbExclamation, "Kontaktsentralen"
         Exit Sub
     End If
     itm.Display
@@ -2074,6 +2124,7 @@ Private Sub Synkroniser(ByVal visMelding As Boolean)
             "Nytt matchet direkte: " & resultat("AntallNyeMatchet") & vbCrLf & _
             "Matchet via samtale: " & resultat("AntallMatchetViaSamtale") & vbCrLf & _
             "Uavklart/flertydig: " & resultat("Uavklarte").Count & vbCrLf & _
+            "Fjernet (flyttet, slettet eller uten kategori i Outlook): " & resultat("AntallFjernetFraCache") & vbCrLf & _
             "Rader med status: " & resultat("AntallOppdatertRad")
         MsgBox m, vbInformation, "Kontaktsentralen - synkronisering ferdig"
     End If
