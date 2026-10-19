@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.12.0"
+$KtsVersion = "0.12.1"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -888,12 +888,29 @@ Public Function KjørSkann() As Object
 
     ' --- Beregn kontrollstatus for ALLE rader med minst en kjent melding
     '     (fra hele cachen, ikke bare denne skanningens funn). ---
-    tbl.ListColumns(kontrollKolNr).DataBodyRange.ClearContents
+    ' Skriv BARE celler der statusen faktisk er endret (0.12.1). Tidligere ble
+    ' hele kolonnen tomt og skrevet pa nytt ved hver synkronisering, og all
+    ' farge nullstilt og satt pa nytt - det endret det som vises i et aktivt
+    ' filter i tabellen selv nar ingenting var nytt.
+    Dim nyStatus As Object: Set nyStatus = CreateObject("Scripting.Dictionary")
     Dim key As Variant
     For Each key In KtsSisteMeldinger.Keys
-        tbl.DataBodyRange.Cells(CLng(key), kontrollKolNr).Value = KtsKontrollstatusForRad(CLng(key), konfig)
+        nyStatus(CLng(key)) = KtsKontrollstatusForRad(CLng(key), konfig)
         resultat("AntallOppdatertRad") = resultat("AntallOppdatertRad") + 1
     Next key
+    Dim rr As Long, gammelStatus As String, nyTekst As String, cv As Variant
+    For rr = 1 To tbl.DataBodyRange.Rows.Count
+        cv = tbl.DataBodyRange.Cells(rr, kontrollKolNr).Value
+        If IsError(cv) Then gammelStatus = "#FEIL" Else gammelStatus = Trim(CStr(cv))
+        If nyStatus.Exists(rr) Then nyTekst = CStr(nyStatus(rr)) Else nyTekst = ""
+        If gammelStatus <> nyTekst Then
+            If Len(nyTekst) = 0 Then
+                tbl.DataBodyRange.Cells(rr, kontrollKolNr).ClearContents
+            Else
+                tbl.DataBodyRange.Cells(rr, kontrollKolNr).Value = nyTekst
+            End If
+        End If
+    Next rr
     KtsFormaterKontrollkolonne tbl, kontrollKolNr, KtsLesKonfig()
 
     Set KjørSkann = resultat
@@ -1264,18 +1281,30 @@ End Function
 Private Sub KtsFormaterKontrollkolonne(ByVal tbl As ListObject, ByVal kolNr As Long, ByVal konfig As Object)
     Dim farger As Object: Set farger = KtsLesKategoriFarger(konfig)
     Dim r As Long, c As Range, status As String, farge As Long
+    ' Endrer bare celler der fargen faktisk er feil (0.12.1) - a nullstille og
+    ' sette fargen pa hver celle hver gang gjorde at et filter i tabellen
+    ' (f.eks. etter farge) viste noe annet etter hver synkronisering.
+    Dim fyll As Long, tekst As Long
     For r = 1 To tbl.DataBodyRange.Rows.Count
         Set c = tbl.DataBodyRange.Cells(r, kolNr)
-        status = Trim(CStr(c.Value))
-        c.Interior.Pattern = xlNone
-        c.Font.ColorIndex = xlAutomatic
-        If Len(status) > 0 Then
+        If IsError(c.Value) Then status = "" Else status = Trim(CStr(c.Value))
+        If Len(status) = 0 Then
+            If c.Interior.Pattern <> xlNone Then c.Interior.Pattern = xlNone
+            If c.Font.ColorIndex <> xlAutomatic Then c.Font.ColorIndex = xlAutomatic
+        Else
             farge = KtsKategoriRGB(status, farger)
             If farge = -1 Then
-                c.Interior.Color = RGB(217, 217, 217)
+                fyll = RGB(217, 217, 217)
+                tekst = -1
             Else
-                c.Interior.Color = farge
-                c.Font.Color = KtsTekstFargeMot(farge)
+                fyll = farge
+                tekst = KtsTekstFargeMot(farge)
+            End If
+            If c.Interior.Pattern = xlNone Or c.Interior.Color <> fyll Then c.Interior.Color = fyll
+            If tekst = -1 Then
+                If c.Font.ColorIndex <> xlAutomatic Then c.Font.ColorIndex = xlAutomatic
+            ElseIf c.Font.Color <> tekst Then
+                c.Font.Color = tekst
             End If
         End If
     Next r
