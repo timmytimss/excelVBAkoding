@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.13.0"
+$KtsVersion = "0.14.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -109,6 +109,11 @@ Private Const KTS_CACHE_FANENAVN As String = "KontaktsentralenCache"
 ' lagres ikke noe sted og overlever ikke at Excel lukkes/apnes pa nytt.
 Public KtsSisteTreff As Object
 Public KtsSisteMeldinger As Object
+' Sendte e-poster fra den delte postboksens Sendte elementer, radNr ->
+' Collection av Dictionary (samme felt som KtsSisteMeldinger, "Avsender"
+' holder mottakerne). Holdes ADSKILT fra KtsSisteMeldinger, sa status,
+' kategorier og tellinger for mottatte e-poster er uendret (0.14.0).
+Public KtsSisteSendte As Object
 Public KtsValgtRad As Long
 
 ' Satt av frmKtsRad rett for den apner frmKtsUavklart, sa uavklart-
@@ -476,7 +481,8 @@ Public Function KtsLastCache() As Object
     migrering = (Trim(CStr(ws.Cells(1, 11).Value)) <> "RadNokkel")
     Dim sisteRad As Long: sisteRad = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
     If sisteRad >= 2 Then
-        Dim v As Variant: v = ws.Range(ws.Cells(2, 1), ws.Cells(sisteRad, 11)).Value
+        ' Kolonne 12 (Retning: "Ut" for sendte, tom for mottatte) kom i 0.14.0.
+        Dim v As Variant: v = ws.Range(ws.Cells(2, 1), ws.Cells(sisteRad, 12)).Value
         Dim i As Long, d As Object, entryIdNokkel As String
         For i = 1 To UBound(v, 1)
             entryIdNokkel = Trim(CStr(v(i, 1)))
@@ -493,6 +499,7 @@ Public Function KtsLastCache() As Object
                 d("Arsak") = CStr(v(i, 9))
                 d("Mappe") = CStr(v(i, 10))
                 d("RadNokkel") = CStr(v(i, 11))
+                d("Retning") = CStr(v(i, 12))
                 If Not resultat.Exists(entryIdNokkel) Then resultat.Add entryIdNokkel, d
             End If
         Next i
@@ -508,10 +515,11 @@ Public Sub KtsLagreCache(ByVal cache As Object)
     KtsSettRadNokler cache
     Dim ws As Worksheet: Set ws = KtsCacheFane()
     Dim sisteRad As Long: sisteRad = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If sisteRad > 1 Then ws.Range(ws.Cells(2, 1), ws.Cells(sisteRad, 11)).ClearContents
+    If sisteRad > 1 Then ws.Range(ws.Cells(2, 1), ws.Cells(sisteRad, 12)).ClearContents
     ws.Cells(1, 9).Value = "Arsak"
     ws.Cells(1, 10).Value = "Mappe"
     ws.Cells(1, 11).Value = "RadNokkel"
+    ws.Cells(1, 12).Value = "Retning"
     ' Tekstformat, ellers gjor Excel om en nokkel som "0012" til tallet 12.
     ws.Columns(11).NumberFormat = "@"
     Dim r As Long: r = 2
@@ -529,6 +537,7 @@ Public Sub KtsLagreCache(ByVal cache As Object)
         If d.Exists("Arsak") Then ws.Cells(r, 9).Value = d("Arsak") Else ws.Cells(r, 9).Value = ""
         If d.Exists("Mappe") Then ws.Cells(r, 10).Value = d("Mappe") Else ws.Cells(r, 10).Value = ""
         If d.Exists("RadNokkel") Then ws.Cells(r, 11).Value = CStr(d("RadNokkel")) Else ws.Cells(r, 11).Value = ""
+        If d.Exists("Retning") Then ws.Cells(r, 12).Value = CStr(d("Retning")) Else ws.Cells(r, 12).Value = ""
         r = r + 1
     Next key
 End Sub
@@ -540,12 +549,29 @@ End Sub
 Public Sub KtsGjenoppbyggSessionFraCache(ByVal cache As Object)
     Set KtsSisteTreff = CreateObject("Scripting.Dictionary")
     Set KtsSisteMeldinger = CreateObject("Scripting.Dictionary")
+    Set KtsSisteSendte = CreateObject("Scripting.Dictionary")
     Set KtsSisteUavklarte = New Collection
     Dim key As Variant, d As Object, info As Object, rad As Long, u As Object
+    Dim erSendt As Boolean
     For Each key In cache.Keys
         Set d = cache(key)
         rad = CLng(d("RadNr"))
-        If rad <= 0 Then
+        erSendt = False
+        If d.Exists("Retning") Then erSendt = (CStr(d("Retning")) = "Ut")
+        If erSendt Then
+            ' Sendt e-post: egen liste, aldri uavklart, ingen status.
+            If rad > 0 Then
+                Set info = CreateObject("Scripting.Dictionary")
+                info("Emne") = d("Emne"): info("Avsender") = d("Avsender"): info("Mottatt") = d("Mottatt")
+                info("Kategori") = d("Kategori"): info("EntryID") = d("EntryID"): info("StoreID") = d("StoreID")
+                info("Mappe") = d("Mappe")
+                If Not KtsSisteSendte.Exists(rad) Then
+                    Dim cs As Collection: Set cs = New Collection
+                    KtsSisteSendte.Add rad, cs
+                End If
+                KtsSisteSendte(rad).Add info
+            End If
+        ElseIf rad <= 0 Then
             ' Ikke matchet til noen rad (0 = ingen sikker match, -1 = flertydig)
             ' - huskes i cachen slik at uavklart-lista og tallet pa knappen
             ' overlever at Excel lukkes.
@@ -836,6 +862,74 @@ Public Function KjørSkann() As Object
         Next i
     Next mappe
 
+    ' --- Sendte e-poster (0.14.0): alt i den delte postboksens Sendte
+    '     elementer fra startpunktet, koblet til rad via mottakerne (eller
+    '     samtalen). Trenger ingen kategori og pavirker ikke status.
+    '     Sendte e-poster som ikke kan kobles til en rad, hoppes over (ikke
+    '     uavklart - det ville fylt lista med intern e-post). ---
+    resultat("AntallSendtKoblet") = 0
+    Dim sendtMappe As Object: Set sendtMappe = KtsFinnSendtMappe(deltPostboks)
+    If Not sendtMappe Is Nothing Then
+        On Error Resume Next: skannedeMapper(LCase(CStr(sendtMappe.FolderPath))) = True: Err.Clear: On Error GoTo Feilhandtering
+        Dim sItems As Object: Set sItems = Nothing
+        If harStartpunkt Then
+            On Error Resume Next
+            Set sItems = sendtMappe.Items.Restrict("[SentOn] >= '" & Format(startpunkt, "ddddd h:nn AMPM") & "'")
+            Err.Clear
+            On Error GoTo Feilhandtering
+        End If
+        If sItems Is Nothing Then Set sItems = sendtMappe.Items
+        Dim si As Long, sItem As Object, sEid As String, sKlasse As Long, sRad As Long, sConv As String, sTil As String
+        For si = 1 To sItems.Count
+            Set sItem = Nothing
+            sKlasse = 0
+            On Error Resume Next
+            Set sItem = sItems.Item(si)
+            If Not sItem Is Nothing Then sKlasse = sItem.Class
+            On Error GoTo Feilhandtering
+            If sKlasse = 43 Then ' olMail
+                sEid = ""
+                On Error Resume Next: sEid = CStr(sItem.EntryID): On Error GoTo Feilhandtering
+                If Len(sEid) > 0 Then
+                    settDenneSkann(sEid) = True
+                    sRad = 0
+                    If cache.Exists(sEid) Then sRad = CLng(cache(sEid)("RadNr"))
+                    sConv = "": sTil = ""
+                    On Error Resume Next: sConv = CStr(sItem.ConversationID): On Error GoTo Feilhandtering
+                    sTil = HentMottakerAdresser(sItem)
+                    If sRad <= 0 Then
+                        If Len(sConv) > 0 And samtaleTilRad.Exists(sConv) Then
+                            sRad = CLng(samtaleTilRad(sConv))
+                        ElseIf Len(sTil) > 0 Then
+                            sRad = FinnMatchendeRadNy(tbl, sItem, epostKolonner, gjenkjenningKolonner, sTil)
+                        End If
+                        If sRad > 0 And Len(sConv) > 0 And Not samtaleTilRad.Exists(sConv) Then samtaleTilRad(sConv) = sRad
+                    End If
+                    If sRad > 0 Then
+                        Dim sd As Object: Set sd = CreateObject("Scripting.Dictionary")
+                        sd("EntryID") = sEid: sd("RadNr") = sRad: sd("Retning") = "Ut"
+                        sd("StoreID") = "": sd("Emne") = "": sd("Mottatt") = "": sd("Kategori") = "": sd("Mappe") = ""
+                        On Error Resume Next
+                        sd("StoreID") = sendtMappe.StoreID
+                        sd("Emne") = CStr(sItem.Subject)
+                        sd("Mottatt") = Format(sItem.SentOn, "dd.mm.yyyy HH:mm")
+                        sd("Kategori") = Trim(CStr(sItem.Categories))
+                        sd("Mappe") = CStr(sendtMappe.Name)
+                        On Error GoTo Feilhandtering
+                        sd("Avsender") = "Til: " & sTil
+                        sd("ConversationID") = sConv
+                        sd("Arsak") = ""
+                        If cache.Exists(sEid) Then cache.Remove sEid
+                        cache.Add sEid, sd
+                        resultat("AntallSendtKoblet") = resultat("AntallSendtKoblet") + 1
+                    ElseIf cache.Exists(sEid) Then
+                        cache.Remove sEid
+                    End If
+                End If
+            End If
+        Next si
+    End If
+
     ' --- Fjern uavklarte cache-oppforinger som IKKE ble sett i denne
     '     skanningen (e-posten er slettet/flyttet/utenfor startpunkt) -
     '     ellers ville de stat som uavklarte for alltid. ---
@@ -867,7 +961,20 @@ Public Function KjørSkann() As Object
                 End If
                 Err.Clear
                 On Error GoTo Feilhandtering
-                If sjekkItem Is Nothing Or Len(sjekkKat) = 0 Then
+                Dim beholdUtenKategori As Boolean: beholdUtenKategori = False
+                If cd.Exists("Retning") Then
+                    ' Sendte e-poster trenger ingen kategori - bare at de finnes
+                    ' i en av de skannede mappene.
+                    If CStr(cd("Retning")) = "Ut" And Not sjekkItem Is Nothing Then
+                        On Error Resume Next
+                        beholdUtenKategori = skannedeMapper.Exists(LCase(CStr(sjekkItem.Parent.FolderPath)))
+                        Err.Clear
+                        On Error GoTo Feilhandtering
+                    End If
+                End If
+                If beholdUtenKategori Then
+                    cd("Kategori") = Trim(CStr(sjekkItem.Categories))
+                ElseIf sjekkItem Is Nothing Or Len(sjekkKat) = 0 Then
                     fjernListe.Add CStr(ck)
                     resultat("AntallFjernetFraCache") = resultat("AntallFjernetFraCache") + 1
                 Else
@@ -932,7 +1039,7 @@ End Function
 ' komma/semikolon (en celle KAN inneholde flere adresser). Aldri løs
 ' substring-matching her - det kunne tidligere feilaktig la
 ' "anna@x.no" treffe inni "hannah@x.no".
-Private Function FinnMatchendeRadNy(ByVal tbl As ListObject, ByVal item As Object, epostKolonner() As String, gjenkjenningKolonner() As String) As Long
+Private Function FinnMatchendeRadNy(ByVal tbl As ListObject, ByVal item As Object, epostKolonner() As String, gjenkjenningKolonner() As String, Optional ByVal adresserOverstyr As String = "") As Long
     ' Kombinerer signalene (endret 2026-09-24 etter at en e-post med baade
     ' kjent avsender-adresse OG skole-ID i emnet havnet i Uavklart): TIDLIGERE
     ' ga flere e-posttreff (samme kontakt/adresse paa flere rader, f.eks. ett
@@ -952,12 +1059,19 @@ Private Function FinnMatchendeRadNy(ByVal tbl As ListObject, ByVal item As Objec
     If Not ErTom(epostKolonner) Then
         Dim mailAdresser As New Collection
         Dim a As Variant
-        For Each a In KtsSplitAdresser(HentAvsenderEpost(item))
-            mailAdresser.Add a
-        Next a
-        For Each a In KtsSplitAdresser(HentCcAdresser(item))
-            mailAdresser.Add a
-        Next a
+        If Len(adresserOverstyr) > 0 Then
+            ' Sendt e-post (0.14.0): mottakerne er skolens adresser.
+            For Each a In KtsSplitAdresser(adresserOverstyr)
+                mailAdresser.Add a
+            Next a
+        Else
+            For Each a In KtsSplitAdresser(HentAvsenderEpost(item))
+                mailAdresser.Add a
+            Next a
+            For Each a In KtsSplitAdresser(HentCcAdresser(item))
+                mailAdresser.Add a
+            Next a
+        End If
 
         If mailAdresser.Count > 0 Then
             For Each kolNavn In epostKolonner
@@ -1041,6 +1155,39 @@ NesteKand:
         If tell > 6 Then liste = liste & " ... (" & tell & " rader)"
         KtsSisteKandidatTekst = " (arkrader: " & liste & ")"
     End If
+End Function
+
+' Til- og Kopi-mottakerne (SMTP) til en sendt e-post, skilt med ";" (0.14.0).
+Private Function HentMottakerAdresser(ByVal item As Object) As String
+    Dim s As String, rec As Object, a As String, exu As Object
+    On Error Resume Next
+    For Each rec In item.Recipients
+        If rec.Type = 1 Or rec.Type = 2 Then
+            a = ""
+            a = rec.Address
+            If rec.AddressEntry.Type = "EX" Then
+                Set exu = Nothing
+                Set exu = rec.AddressEntry.GetExchangeUser()
+                If Not exu Is Nothing Then a = exu.PrimarySmtpAddress
+            End If
+            If Len(a) > 0 Then s = s & ";" & a
+        End If
+    Next rec
+    On Error GoTo 0
+    If Len(s) > 0 Then s = Mid$(s, 2)
+    HentMottakerAdresser = s
+End Function
+
+' Den delte postboksens mappe for sendte e-poster (navnet avhenger av spraket).
+Private Function KtsFinnSendtMappe(ByVal postboks As Object) As Object
+    Dim navn As Variant
+    On Error Resume Next
+    For Each navn In Array("Sent Items", "Sendte elementer", "Sendte e-poster", "Sendt")
+        Set KtsFinnSendtMappe = Nothing
+        Set KtsFinnSendtMappe = postboks.Folders.Item(CStr(navn))
+        If Not KtsFinnSendtMappe Is Nothing Then Exit Function
+    Next navn
+    On Error GoTo 0
 End Function
 
 Private Function HentCcAdresser(ByVal item As Object) As String
@@ -2197,6 +2344,7 @@ Private Sub Synkroniser(ByVal visMelding As Boolean)
             "Matchet via samtale: " & resultat("AntallMatchetViaSamtale") & vbCrLf & _
             "Uavklart/flertydig: " & modKontaktsentralen.KtsAntallUavklarte() & _
                 IIf(modKontaktsentralen.KtsAntallSkjulteUavklarte() > 0, " (+ " & modKontaktsentralen.KtsAntallSkjulteUavklarte() & " skjult etter kategori)", "") & vbCrLf & _
+            "Sendte e-poster koblet til rad: " & resultat("AntallSendtKoblet") & vbCrLf & _
             "Fjernet (flyttet, slettet eller uten kategori i Outlook): " & resultat("AntallFjernetFraCache") & vbCrLf & _
             "Rader med status: " & resultat("AntallOppdatertRad")
         MsgBox m, vbInformation, "Kontaktsentralen - synkronisering ferdig"
@@ -2964,9 +3112,20 @@ Private origRekkefolge As Collection
 Private opprinnelig As Object
 Private valgt As Object
 Private kategoriFarger As Object
+' Per listerad (0.14.0): erSendt(i) = True for sendt e-post, kildeIdx(i) =
+' indeks (1-basert) i KtsSisteMeldinger(rad) eller KtsSisteSendte(rad).
+Private erSendt() As Boolean
+Private kildeIdx() As Long
 
 Private Sub UserForm_Initialize()
     Dim rad As Long: rad = modKontaktsentralen.KtsValgtRad
+    laster = True
+    cboVis.Clear
+    cboVis.AddItem "Alle e-poster"
+    cboVis.AddItem "Bare mottatte"
+    cboVis.AddItem "Bare sendte"
+    cboVis.ListIndex = 0
+    laster = False
     lblTittel.Font.Bold = True
     lblTittel.Caption = "Radkontroll - " & modKontaktsentralen.KtsRadNavnForVisning(rad)
     modKontaktsentralen.KtsStilKnapp cmdAapneOutlook, "bla"
@@ -2993,11 +3152,11 @@ End Sub
 ' Overskriftsrad over meldingslista (samme teknikk som dashbordet).
 Private Sub PlasserOverskrifter()
     On Error Resume Next
-    Dim navn As Variant: navn = Array("Mottatt", "Avsender", "Emne", "Mappe", "Kategorier")
+    Dim navn As Variant: navn = Array("", "Dato", "Fra / til", "Emne", "Mappe", "Kategorier")
     Dim bredder() As String: bredder = Split(lstMeldinger.ColumnWidths, ";")
     Dim x As Single: x = lstMeldinger.Left + 4
     Dim i As Long, b As Single, lbl As Object
-    For i = 0 To 4
+    For i = 0 To 5
         Set lbl = Me.Controls("lblHdr" & (i + 1))
         b = Val(Replace(bredder(i), ",", "."))
         lbl.Caption = navn(i)
@@ -3008,27 +3167,105 @@ Private Sub PlasserOverskrifter()
     Next i
 End Sub
 
+' "dd.mm.yyyy HH:mm" -> Date (uavhengig av regionsinnstillinger). 0 hvis ugyldig.
+Private Function TilDato(ByVal s As String) As Date
+    On Error Resume Next
+    s = Trim(s)
+    If Len(s) < 10 Then Exit Function
+    TilDato = DateSerial(CInt(Mid$(s, 7, 4)), CInt(Mid$(s, 4, 2)), CInt(Left$(s, 2)))
+    If Len(s) >= 16 Then TilDato = TilDato + TimeSerial(CInt(Mid$(s, 12, 2)), CInt(Mid$(s, 15, 2)), 0)
+End Function
+
+' Mottatte og sendte e-poster for raden i EN liste, nyeste forst (0.14.0).
+' Nedtrekkslista "Vis" kan begrense til bare mottatte eller bare sendte.
 Private Sub LastMeldinger()
     Dim rad As Long: rad = modKontaktsentralen.KtsValgtRad
     laster = True
     lstMeldinger.Clear
-    If Not modKontaktsentralen.KtsSisteMeldinger Is Nothing Then
-        If modKontaktsentralen.KtsSisteMeldinger.Exists(rad) Then
-            Dim i As Long, m As Object, n As Long
-            For i = 1 To modKontaktsentralen.KtsSisteMeldinger(rad).Count
-                Set m = modKontaktsentralen.KtsSisteMeldinger(rad)(i)
-                lstMeldinger.AddItem m("Mottatt")
-                n = lstMeldinger.ListCount - 1
-                lstMeldinger.List(n, 1) = m("Avsender")
-                lstMeldinger.List(n, 2) = m("Emne")
-                If m.Exists("Mappe") Then lstMeldinger.List(n, 3) = m("Mappe")
-                lstMeldinger.List(n, 4) = m("Kategori")
+    Erase erSendt
+    Erase kildeIdx
+
+    Dim visInn As Boolean, visUt As Boolean
+    visInn = (cboVis.ListIndex <> 2)
+    visUt = (cboVis.ListIndex <> 1)
+
+    ' Samle (dato, sendt, indeks) for alt som skal vises.
+    Dim n As Long, datoer() As Date, ut() As Boolean, idx() As Long
+    Dim i As Long, kilde As Object, m As Object, s As Long
+    For s = 0 To 1
+        Set kilde = Nothing
+        If s = 0 And visInn Then
+            If Not modKontaktsentralen.KtsSisteMeldinger Is Nothing Then
+                If modKontaktsentralen.KtsSisteMeldinger.Exists(rad) Then Set kilde = modKontaktsentralen.KtsSisteMeldinger(rad)
+            End If
+        ElseIf s = 1 And visUt Then
+            If Not modKontaktsentralen.KtsSisteSendte Is Nothing Then
+                If modKontaktsentralen.KtsSisteSendte.Exists(rad) Then Set kilde = modKontaktsentralen.KtsSisteSendte(rad)
+            End If
+        End If
+        If Not kilde Is Nothing Then
+            For i = 1 To kilde.Count
+                n = n + 1
+                ReDim Preserve datoer(1 To n): ReDim Preserve ut(1 To n): ReDim Preserve idx(1 To n)
+                datoer(n) = TilDato(CStr(kilde(i)("Mottatt")))
+                ut(n) = (s = 1)
+                idx(n) = i
             Next i
         End If
+    Next s
+
+    ' Nyeste forst (enkel sortering - en rad har sjelden mange e-poster).
+    Dim j As Long, td As Date, tb As Boolean, tl As Long
+    For i = 1 To n - 1
+        For j = i + 1 To n
+            If datoer(j) > datoer(i) Then
+                td = datoer(i): datoer(i) = datoer(j): datoer(j) = td
+                tb = ut(i): ut(i) = ut(j): ut(j) = tb
+                tl = idx(i): idx(i) = idx(j): idx(j) = tl
+            End If
+        Next j
+    Next i
+
+    If n > 0 Then
+        ReDim erSendt(0 To n - 1)
+        ReDim kildeIdx(0 To n - 1)
+        Dim r As Long
+        For i = 1 To n
+            If ut(i) Then
+                Set m = modKontaktsentralen.KtsSisteSendte(rad)(idx(i))
+            Else
+                Set m = modKontaktsentralen.KtsSisteMeldinger(rad)(idx(i))
+            End If
+            lstMeldinger.AddItem IIf(ut(i), "Ut", "Inn")
+            r = lstMeldinger.ListCount - 1
+            lstMeldinger.List(r, 1) = m("Mottatt")
+            lstMeldinger.List(r, 2) = m("Avsender")
+            lstMeldinger.List(r, 3) = m("Emne")
+            If m.Exists("Mappe") Then lstMeldinger.List(r, 4) = m("Mappe")
+            lstMeldinger.List(r, 5) = m("Kategori")
+            erSendt(r) = ut(i)
+            kildeIdx(r) = idx(i)
+        Next i
     End If
     If valgtIndeks >= lstMeldinger.ListCount Then valgtIndeks = -1
     If valgtIndeks >= 0 Then lstMeldinger.ListIndex = valgtIndeks
     laster = False
+End Sub
+
+Private Function ValgtErSendt() As Boolean
+    If valgtIndeks < 0 Then Exit Function
+    ValgtErSendt = erSendt(valgtIndeks)
+End Function
+
+' Bytte i "Vis"-lista: start pa nytt uten valgt e-post.
+Private Sub cboVis_Change()
+    If laster Then Exit Sub
+    If ErEndret() Then
+        If MsgBox("Du har ulagrede kategori-endringer på valgt e-post. Forkaste dem?", vbQuestion + vbYesNo, "Kontaktsentralen") = vbNo Then Exit Sub
+    End If
+    valgtIndeks = -1
+    LastMeldinger
+    LastValg
 End Sub
 
 ' Legger ut en knapp per kategori (postboksens kategorier + de som allerede
@@ -3068,7 +3305,8 @@ Private Sub OppdaterKnapper()
     For i = 1 To kategoriNavn.Count
         If i > MAKS_KNAPPER Then Exit For
         Set knapp = Me.Controls("cmdKat" & i)
-        knapp.Enabled = (valgtIndeks >= 0)
+        ' Kategorier endres bare pa mottatte e-poster (0.14.0).
+        knapp.Enabled = (valgtIndeks >= 0 And Not ValgtErSendt())
         If valgt.Exists(LCase(kategoriNavn(i))) Then
             farge = modKontaktsentralen.KtsKategoriRGB(CStr(kategoriNavn(i)), kategoriFarger)
             If farge = -1 Then farge = RGB(58, 114, 196)
@@ -3093,6 +3331,8 @@ Private Sub OppdaterKnapper()
         modKontaktsentralen.KtsStilKnapp cmdAngre, "gra"
         If valgtIndeks < 0 Then
             lblKategorier.Caption = "Velg en e-post i lista for å endre kategoriene."
+        ElseIf ValgtErSendt() Then
+            lblKategorier.Caption = "Sendt e-post - kategorier endres bare på mottatte e-poster."
         Else
             lblKategorier.Caption = "Kategorier på valgt e-post - klikk en kategori for å slå den av eller på."
         End If
@@ -3119,9 +3359,9 @@ Private Sub LastValg()
     valgt.RemoveAll
     opprinnelig.RemoveAll
     Set origRekkefolge = New Collection
-    If valgtIndeks >= 0 Then
+    If valgtIndeks >= 0 And Not ValgtErSendt() Then
         Dim m As Object, kat As Variant, n As String
-        Set m = modKontaktsentralen.KtsSisteMeldinger(modKontaktsentralen.KtsValgtRad)(valgtIndeks + 1)
+        Set m = modKontaktsentralen.KtsSisteMeldinger(modKontaktsentralen.KtsValgtRad)(kildeIdx(valgtIndeks))
         For Each kat In modKontaktsentralen.KtsSplitKategorier(CStr(m("Kategori")))
             n = LCase(CStr(kat))
             If Not valgt.Exists(n) Then
@@ -3136,6 +3376,7 @@ End Sub
 
 Private Sub KatKlikk(ByVal i As Long)
     If valgtIndeks < 0 Then Exit Sub
+    If ValgtErSendt() Then Exit Sub
     If i > kategoriNavn.Count Then Exit Sub
     Dim n As String: n = LCase(CStr(kategoriNavn(i)))
     If valgt.Exists(n) Then
@@ -3167,7 +3408,15 @@ Private Sub lstMeldinger_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
 End Sub
 
 Private Sub cmdAapneOutlook_Click()
-    If lstMeldinger.ListIndex >= 0 Then modKontaktsentralen.KtsAapneMelding modKontaktsentralen.KtsValgtRad, lstMeldinger.ListIndex + 1
+    Dim li As Long: li = lstMeldinger.ListIndex
+    If li < 0 Then Exit Sub
+    Dim m As Object
+    If erSendt(li) Then
+        Set m = modKontaktsentralen.KtsSisteSendte(modKontaktsentralen.KtsValgtRad)(kildeIdx(li))
+    Else
+        Set m = modKontaktsentralen.KtsSisteMeldinger(modKontaktsentralen.KtsValgtRad)(kildeIdx(li))
+    End If
+    modKontaktsentralen.KtsAapneMeldingMedId CStr(m("EntryID")), CStr(m("StoreID"))
 End Sub
 
 ' Skriver valget til Outlook for DEN VALGTE e-posten. Eksisterende kategorier
@@ -3186,10 +3435,11 @@ End Function
 
 Private Sub cmdLagreKategori_Click()
     If valgtIndeks < 0 Then Exit Sub
+    If ValgtErSendt() Then Exit Sub
     If Not ErEndret() Then Exit Sub
     Dim liste As Collection: Set liste = ByggLagreListe()
     Dim feil As String, lagret As String
-    lagret = modKontaktsentralen.KtsLagreKategorierPaaMelding(modKontaktsentralen.KtsValgtRad, valgtIndeks + 1, liste, feil)
+    lagret = modKontaktsentralen.KtsLagreKategorierPaaMelding(modKontaktsentralen.KtsValgtRad, kildeIdx(valgtIndeks), liste, feil)
     If Len(feil) > 0 Then
         MsgBox feil, vbExclamation, "Kontaktsentralen"
         Exit Sub
@@ -3928,9 +4178,12 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
         $frmRad.Properties("Caption").Value = "Kontaktsentralen - Radkontroll"
         $frmRad.Properties("Width").Value = 760
         $frmRad.Properties("Height").Value = 430
-        $lblRadT = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblRadT.Name="lblTittel"; $lblRadT.Left=10; $lblRadT.Top=8; $lblRadT.Width=720; $lblRadT.Height=20
-        foreach ($hNr in 1..5) { $h = $frmRad.Designer.Controls.Add("Forms.Label.1"); $h.Name="lblHdr$hNr"; $h.Caption="Kolonne $hNr"; $h.Left=10; $h.Top=34; $h.Width=100; $h.Height=14 }
-        $lstRad = $frmRad.Designer.Controls.Add("Forms.ListBox.1"); $lstRad.Name="lstMeldinger"; $lstRad.Left=10; $lstRad.Top=50; $lstRad.Width=720; $lstRad.Height=150; $lstRad.ColumnCount=5; $lstRad.ColumnWidths="88 pt;140 pt;190 pt;115 pt;150 pt"
+        $lblRadT = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblRadT.Name="lblTittel"; $lblRadT.Left=10; $lblRadT.Top=8; $lblRadT.Width=520; $lblRadT.Height=20
+        # "Vis"-valg: alle / bare mottatte / bare sendte (0.14.0).
+        $lblVis = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblVis.Name="lblVis"; $lblVis.Caption="Vis:"; $lblVis.Left=540; $lblVis.Top=10; $lblVis.Width=22; $lblVis.Height=16
+        $cboVis = $frmRad.Designer.Controls.Add("Forms.ComboBox.1"); $cboVis.Name="cboVis"; $cboVis.Left=564; $cboVis.Top=7; $cboVis.Width=166; $cboVis.Height=18; $cboVis.Style=2
+        foreach ($hNr in 1..6) { $h = $frmRad.Designer.Controls.Add("Forms.Label.1"); $h.Name="lblHdr$hNr"; $h.Caption="Kolonne $hNr"; $h.Left=10; $h.Top=34; $h.Width=100; $h.Height=14 }
+        $lstRad = $frmRad.Designer.Controls.Add("Forms.ListBox.1"); $lstRad.Name="lstMeldinger"; $lstRad.Left=10; $lstRad.Top=50; $lstRad.Width=720; $lstRad.Height=150; $lstRad.ColumnCount=6; $lstRad.ColumnWidths="30 pt;86 pt;140 pt;185 pt;110 pt;145 pt"
         $lblKat = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblKat.Name="lblKategorier"; $lblKat.Caption="Velg en e-post i lista for å endre kategoriene."; $lblKat.Left=10; $lblKat.Top=210; $lblKat.Width=720; $lblKat.Height=18
         foreach ($katNr in 1..30) { $kb = $frmRad.Designer.Controls.Add("Forms.CommandButton.1"); $kb.Name="cmdKat$katNr"; $kb.Caption="Kategori $katNr"; $kb.Left=10; $kb.Top=232; $kb.Width=90; $kb.Height=24; $kb.Visible=$false }
         $b1=$frmRad.Designer.Controls.Add("Forms.CommandButton.1"); $b1.Name="cmdLagreKategori"; $b1.Caption="Lagre i Outlook"; $b1.Left=10; $b1.Top=300; $b1.Width=130; $b1.Height=28
