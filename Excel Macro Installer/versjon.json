@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.11.02.5",
+    "versjon":  "2026.11.02.6",
     "dato":  "2026-11-02",
     "emi":  "2.9.5.0",
-    "endringer":  "Kontaktsentralen 0.15.2: «Undeliverable»-meldinger får dato også når de ikke leses på nytt."
+    "endringer":  "Kontaktsentralen 0.15.3: nyeste e-post øverst i Radkontroll."
 }

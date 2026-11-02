@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.15.2"
+$KtsVersion = "0.15.3"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -3319,12 +3319,12 @@ Private Sub LastMeldinger()
         End If
     Next s
 
-    ' Kronologisk, eldste forst, inn og ut om hverandre (enkel sortering - en
-    ' rad har sjelden mange e-poster).
+    ' Kronologisk, NYESTE forst (Håkons onske), inn og ut om hverandre (enkel
+    ' sortering - en rad har sjelden mange e-poster).
     Dim j As Long, td As Date, tb As Boolean, tl As Long
     For i = 1 To n - 1
         For j = i + 1 To n
-            If datoer(j) < datoer(i) Then
+            If datoer(j) > datoer(i) Then
                 td = datoer(i): datoer(i) = datoer(j): datoer(j) = td
                 tb = ut(i): ut(i) = ut(j): ut(j) = tb
                 tl = idx(i): idx(i) = idx(j): idx(j) = tl
