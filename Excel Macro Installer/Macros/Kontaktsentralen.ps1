@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.15.3"
+$KtsVersion = "0.16.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -1236,6 +1236,107 @@ Private Function HentMottakerAdresser(ByVal item As Object) As String
     If Len(s) > 0 Then s = Mid$(s, 2)
     HentMottakerAdresser = s
 End Function
+
+' --- Send mail fra Radkontroll (0.16.0) ---
+' Apner et vanlig, nytt Outlook-mailvindu for raden, forhandsutfylt fra en
+' global mal (KTS_MAIL_*): Til/Kopi fra valgte kolonner, emne og tekst med
+' plassholdere {Kolonnenavn} som byttes med radens verdier. Ingen sending og
+' ingen meldingsbokser - mangler malen, apnes oppsettet i stedet.
+
+' Lagrer som tekst (apostrof foran), sa en verdi som begynner med "=" eller
+' "-" ikke blir tolket som formel.
+Public Sub KtsSkrivKonfigTekst(ByVal nokkel As String, ByVal verdi As String)
+    KtsSkrivKonfigVerdi nokkel, "'" & verdi
+End Sub
+
+Private Function KtsCelleTekst(ByVal v As Variant) As String
+    If IsError(v) Or IsEmpty(v) Or IsNull(v) Then Exit Function
+    If VarType(v) = vbDate Then
+        If v = Int(v) Then KtsCelleTekst = Format(v, "dd.mm.yyyy") Else KtsCelleTekst = Format(v, "dd.mm.yyyy HH:mm")
+    Else
+        KtsCelleTekst = Trim(CStr(v))
+    End If
+End Function
+
+' Bytter {Kolonnenavn} med radens verdi for alle kolonner i tabellen.
+Public Function KtsFyllPlassholdere(ByVal tekst As String, ByVal tbl As ListObject, ByVal rad As Long) As String
+    Dim c As Long, navn As String
+    If Not tbl Is Nothing And rad >= 1 Then
+        For c = 1 To tbl.ListColumns.Count
+            navn = tbl.ListColumns(c).Name
+            If InStr(1, tekst, "{" & navn & "}", vbTextCompare) > 0 Then
+                tekst = Replace(tekst, "{" & navn & "}", KtsCelleTekst(tbl.DataBodyRange.Cells(rad, c).Value), , , vbTextCompare)
+            End If
+        Next c
+    End If
+    KtsFyllPlassholdere = tekst
+End Function
+
+Private Function KtsHtmlTekst(ByVal s As String) As String
+    s = Replace(s, "&", "&amp;")
+    s = Replace(s, "<", "&lt;")
+    s = Replace(s, ">", "&gt;")
+    s = Replace(s, vbCrLf, "<br>")
+    s = Replace(s, vbCr, "<br>")
+    s = Replace(s, vbLf, "<br>")
+    KtsHtmlTekst = s
+End Function
+
+Public Function KtsMailMalFinnes() As Boolean
+    Dim k As Object: Set k = KtsLesKonfig()
+    If k.Exists("KTS_MAIL_TIL") Then KtsMailMalFinnes = (Len(Trim(CStr(k("KTS_MAIL_TIL")))) > 0)
+End Function
+
+Public Sub KtsApneMailForRad(ByVal rad As Long)
+    If Not KtsMailMalFinnes() Then
+        frmKtsMailMal.Show
+        If Not KtsMailMalFinnes() Then Exit Sub
+    End If
+    Dim k As Object: Set k = KtsLesKonfig()
+    Dim tbl As ListObject: Set tbl = KtsAktivTabell()
+    If tbl Is Nothing Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    If rad < 1 Or rad > tbl.DataBodyRange.Rows.Count Then Exit Sub
+
+    Dim til As String, kopi As String, emne As String, tekst As String, fra As String, kolNr As Long
+    kolNr = KtsKolonneNr(tbl, IIf(k.Exists("KTS_MAIL_TIL"), CStr(k("KTS_MAIL_TIL")), ""))
+    If kolNr > 0 Then til = KtsCelleTekst(tbl.DataBodyRange.Cells(rad, kolNr).Value)
+    If k.Exists("KTS_MAIL_KOPI") Then
+        kolNr = KtsKolonneNr(tbl, CStr(k("KTS_MAIL_KOPI")))
+        If kolNr > 0 Then kopi = KtsCelleTekst(tbl.DataBodyRange.Cells(rad, kolNr).Value)
+    End If
+    If k.Exists("KTS_MAIL_EMNE") Then emne = KtsFyllPlassholdere(CStr(k("KTS_MAIL_EMNE")), tbl, rad)
+    If k.Exists("KTS_MAIL_TEKST") Then tekst = KtsFyllPlassholdere(CStr(k("KTS_MAIL_TEKST")), tbl, rad)
+    If k.Exists("KTS_MAIL_FRA") Then fra = Trim(CStr(k("KTS_MAIL_FRA")))
+
+    On Error Resume Next
+    Dim olApp As Object, m As Object
+    Set olApp = GetObject(, "Outlook.Application")
+    If olApp Is Nothing Then Set olApp = CreateObject("Outlook.Application")
+    If olApp Is Nothing Then Exit Sub
+    Set m = olApp.CreateItem(0) ' olMailItem
+    If m Is Nothing Then Exit Sub
+    If Len(fra) > 0 Then m.SentOnBehalfOfName = fra
+    m.To = til
+    If Len(kopi) > 0 Then m.CC = kopi
+    m.Subject = emne
+    ' Display FORST (setter inn signaturen), deretter teksten foran den -
+    ' Display nullstiller ellers brodteksten (g-display-nullstiller-signatur).
+    m.Display
+    If Len(tekst) > 0 Then
+        Dim html As String, p As Long, q As Long, inn As String
+        html = m.HTMLBody
+        inn = "<div style=""font-family:Calibri,Arial,sans-serif;font-size:11pt"">" & KtsHtmlTekst(tekst) & "</div>"
+        p = InStr(1, html, "<body", vbTextCompare)
+        If p > 0 Then q = InStr(p, html, ">")
+        If q > 0 Then
+            m.HTMLBody = Left$(html, q) & inn & Mid$(html, q + 1)
+        Else
+            m.HTMLBody = inn & html
+        End If
+    End If
+    On Error GoTo 0
+End Sub
 
 ' Fyller tom dato (og tom avsender for "Undeliverable"-rapporter) i en
 ' oppforing fra selve Outlook-elementet (0.15.2). NDR-rapporter har ingen
@@ -3232,7 +3333,10 @@ Private Sub UserForm_Initialize()
     cboVis.ListIndex = 0
     laster = False
     lblTittel.Font.Bold = True
-    lblTittel.Caption = "Radkontroll - " & modKontaktsentralen.KtsRadNavnForVisning(rad)
+    ' Uten "Radkontroll - " foran (star allerede i vindustittelen), sa navnet
+    ' far plass ved siden av knappene Send mail / Mal / Skann na (0.16.0).
+    lblTittel.Caption = modKontaktsentralen.KtsRadNavnForVisning(rad)
+    lblTittel.ControlTipText = lblTittel.Caption
     ' Handlingsknappene har vanlig, ufarget stil (0.15.0) - farge er forbeholdt
     ' kategoriknappene, ellers ble det forvirrende.
     Set valgt = CreateObject("Scripting.Dictionary")
@@ -3573,6 +3677,36 @@ End Sub
 ' Tilbake til hovedmenyen (dashbordet). Er dashbordet allerede apent (radsiden
 ' ble apnet derfra) lukker vi bare radsiden; ble den apnet med dobbeltklikk i
 ' en celle i Excel apnes dashbordet na.
+' Send mail (0.16.0): apner et forhandsutfylt Outlook-vindu for raden.
+Private Sub cmdSendMail_Click()
+    modKontaktsentralen.KtsApneMailForRad modKontaktsentralen.KtsValgtRad
+End Sub
+
+Private Sub cmdMailOppsett_Click()
+    frmKtsMailMal.Show
+End Sub
+
+' Skann na fra radsiden: synkroniserer og laster raden pa nytt. Resultatet
+' vises i teksten over kategoriknappene (ingen meldingsboks).
+Private Sub cmdSkannRad_Click()
+    If ErEndret() Then
+        If MsgBox("Du har ulagrede kategori-endringer. Forkaste dem og skanne?", vbQuestion + vbYesNo, "Kontaktsentralen") = vbNo Then Exit Sub
+    End If
+    lblKategorier.Caption = "Skanner ..."
+    Me.Repaint
+    Dim res As Object: Set res = modKontaktsentralen.KjørSkann()
+    valgtIndeks = -1
+    LastMeldinger
+    ByggKnapper modKontaktsentralen.KtsValgtRad
+    LastValg
+    modKontaktsentralen.KtsTilpassVindu Me
+    If res.Exists("Feil") Then
+        lblKategorier.Caption = "Skanning feilet: " & res("Feil")
+    Else
+        lblKategorier.Caption = "Skannet ferdig - " & lstMeldinger.ListCount & " e-post(er) for denne raden."
+    End If
+End Sub
+
 Private Sub cmdHovedmeny_Click()
     If ErEndret() Then
         If MsgBox("Du har ulagrede kategori-endringer. Lukke uten å lagre?", vbQuestion + vbYesNo, "Kontaktsentralen") = vbNo Then Exit Sub
@@ -3594,6 +3728,93 @@ End Sub
 $katKlikkKode = ""
 foreach ($katNr in 1..30) { $katKlikkKode += "Private Sub cmdKat${katNr}_Click(): KatKlikk ${katNr}: End Sub`n" }
 $formCodeKtsRad = $formCodeKtsRad + "`n" + $katKlikkKode
+
+# ---------------------------------------------------------------
+# VBA-kildekode: frmKtsMailMal (mal for "Send mail" i Radkontroll, 0.16.0)
+# ---------------------------------------------------------------
+$formCodeKtsMailMal = @'
+Option Explicit
+
+Private Sub UserForm_Initialize()
+    lblTittel.Font.Bold = True
+    lblTittel.Caption = "Mal for Send mail"
+    Dim k As Object: Set k = modKontaktsentralen.KtsLesKonfig()
+    Dim tbl As ListObject: Set tbl = modKontaktsentralen.KtsAktivTabell()
+    cboTil.Clear
+    cboKopi.Clear
+    lstKolonner.Clear
+    cboKopi.AddItem "(ingen)"
+    Dim c As Long
+    If Not tbl Is Nothing Then
+        For c = 1 To tbl.ListColumns.Count
+            cboTil.AddItem tbl.ListColumns(c).Name
+            cboKopi.AddItem tbl.ListColumns(c).Name
+            lstKolonner.AddItem tbl.ListColumns(c).Name
+        Next c
+    End If
+    VelgIListe cboTil, Verdi(k, "KTS_MAIL_TIL")
+    cboKopi.ListIndex = 0
+    VelgIListe cboKopi, Verdi(k, "KTS_MAIL_KOPI")
+    txtFra.Value = Verdi(k, "KTS_MAIL_FRA")
+    txtEmne.Value = Verdi(k, "KTS_MAIL_EMNE")
+    txtTekst.Value = Verdi(k, "KTS_MAIL_TEKST")
+    modKontaktsentralen.KtsTilpassVindu Me
+End Sub
+
+Private Function Verdi(ByVal k As Object, ByVal nokkel As String) As String
+    If k.Exists(nokkel) Then Verdi = CStr(k(nokkel))
+End Function
+
+' Velger teksten i en nedtrekksliste hvis den finnes (aldri feil pa en
+' kolonne som er omdopt siden sist - g-combo-style2-verdi-finnes-ikke).
+Private Sub VelgIListe(ByVal cbo As MSForms.ComboBox, ByVal tekst As String)
+    Dim i As Long
+    If Len(tekst) = 0 Then Exit Sub
+    For i = 0 To cbo.ListCount - 1
+        If StrComp(cbo.List(i), tekst, vbTextCompare) = 0 Then
+            cbo.ListIndex = i
+            Exit Sub
+        End If
+    Next i
+End Sub
+
+Private Function ValgtPlassholder() As String
+    If lstKolonner.ListIndex >= 0 Then ValgtPlassholder = "{" & lstKolonner.List(lstKolonner.ListIndex) & "}"
+End Function
+
+Private Sub cmdSettInnEmne_Click()
+    Dim s As String: s = ValgtPlassholder()
+    If Len(s) = 0 Then Exit Sub
+    txtEmne.SelText = s
+End Sub
+
+Private Sub cmdSettInnTekst_Click()
+    Dim s As String: s = ValgtPlassholder()
+    If Len(s) = 0 Then Exit Sub
+    txtTekst.SelText = s
+End Sub
+
+Private Sub lstKolonner_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
+    cmdSettInnTekst_Click
+End Sub
+
+Private Sub cmdLagre_Click()
+    If cboTil.ListIndex >= 0 Then modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_TIL", CStr(cboTil.Value)
+    If cboKopi.ListIndex > 0 Then
+        modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_KOPI", CStr(cboKopi.Value)
+    Else
+        modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_KOPI", ""
+    End If
+    modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_FRA", Trim(CStr(txtFra.Value))
+    modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_EMNE", CStr(txtEmne.Value)
+    modKontaktsentralen.KtsSkrivKonfigTekst "KTS_MAIL_TEKST", CStr(txtTekst.Value)
+    Unload Me
+End Sub
+
+Private Sub cmdAvbryt_Click()
+    Unload Me
+End Sub
+'@
 
 # ---------------------------------------------------------------
 # VBA-kildekode: frmKtsUavklart (match uavklarte e-poster til rad)
@@ -3989,7 +4210,7 @@ if ($Uninstall) {
     # reinstallasjon gjenbruker da gamle innstillinger.
     Write-Output "Fjerner Kontaktsentralen fra $($wb.Name) ..."
     try { Remove-DobbeltklikkFraThisWorkbook } catch {}
-    foreach ($navn in @("modKontaktsentralen", "frmKontaktsentralen", "frmKtsOppsett", "frmKtsUavklart", "frmKtsRad")) {
+    foreach ($navn in @("modKontaktsentralen", "frmKontaktsentralen", "frmKtsOppsett", "frmKtsUavklart", "frmKtsRad", "frmKtsMailMal")) {
         try {
             $eksisterende = $vbProject.VBComponents.Item($navn)
             $vbProject.VBComponents.Remove($eksisterende)
@@ -4281,7 +4502,11 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
         $frmRad.Properties("Caption").Value = "Kontaktsentralen - Radkontroll"
         $frmRad.Properties("Width").Value = 760
         $frmRad.Properties("Height").Value = 430
-        $lblRadT = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblRadT.Name="lblTittel"; $lblRadT.Left=10; $lblRadT.Top=8; $lblRadT.Width=520; $lblRadT.Height=20
+        $lblRadT = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblRadT.Name="lblTittel"; $lblRadT.Left=10; $lblRadT.Top=8; $lblRadT.Width=290; $lblRadT.Height=20
+        # Send mail / Mal / Skann na (0.16.0), til venstre for "Vis".
+        $bM=$frmRad.Designer.Controls.Add("Forms.CommandButton.1"); $bM.Name="cmdSendMail"; $bM.Caption="Send mail"; $bM.Left=305; $bM.Top=5; $bM.Width=76; $bM.Height=22
+        $bO=$frmRad.Designer.Controls.Add("Forms.CommandButton.1"); $bO.Name="cmdMailOppsett"; $bO.Caption="Mal..."; $bO.Left=384; $bO.Top=5; $bO.Width=58; $bO.Height=22
+        $bS=$frmRad.Designer.Controls.Add("Forms.CommandButton.1"); $bS.Name="cmdSkannRad"; $bS.Caption="Skann nå"; $bS.Left=446; $bS.Top=5; $bS.Width=72; $bS.Height=22
         # "Vis"-valg: alle / bare mottatte / bare sendte (0.14.0).
         $lblVis = $frmRad.Designer.Controls.Add("Forms.Label.1"); $lblVis.Name="lblVis"; $lblVis.Caption="Vis:"; $lblVis.Left=540; $lblVis.Top=10; $lblVis.Width=22; $lblVis.Height=16
         $cboVis = $frmRad.Designer.Controls.Add("Forms.ComboBox.1"); $cboVis.Name="cboVis"; $cboVis.Left=564; $cboVis.Top=7; $cboVis.Width=166; $cboVis.Height=18; $cboVis.Style=2
@@ -4382,6 +4607,38 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
         $frmUavFrm = Join-Path $tempDir "frmKtsUavklart.frm"
         $frmUav.Export($frmUavFrm)
 
+        # --- frmKtsMailMal (UserForm - mal for Send mail, 0.16.0) ---
+        $frmMal = $tempWb.VBProject.VBComponents.Add(3)
+        $frmMal.Name = "frmKtsMailMal"
+        $frmMal.Properties("Caption").Value = "Kontaktsentralen - Mal for Send mail"
+        $frmMal.Properties("Width").Value = 600
+        $frmMal.Properties("Height").Value = 470
+        $d = $frmMal.Designer
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblTittel"; $c.Left=10; $c.Top=8; $c.Width=560; $c.Height=18
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblHjelp"; $c.Left=10; $c.Top=28; $c.Width=560; $c.Height=28; $c.WordWrap=$true
+        $c.Caption = "Skriv {Kolonnenavn} i emne eller tekst for å fylle inn radens verdi. Velg en kolonne til høyre og trykk Sett inn (eller dobbeltklikk). Send mail åpner et vanlig Outlook-vindu - ingenting sendes automatisk."
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblTil"; $c.Caption="Til (kolonne):"; $c.Left=10; $c.Top=64; $c.Width=80; $c.Height=16
+        $c = $d.Controls.Add("Forms.ComboBox.1"); $c.Name="cboTil"; $c.Left=95; $c.Top=61; $c.Width=270; $c.Height=18; $c.Style=2
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblKopi"; $c.Caption="Kopi (kolonne):"; $c.Left=10; $c.Top=88; $c.Width=80; $c.Height=16
+        $c = $d.Controls.Add("Forms.ComboBox.1"); $c.Name="cboKopi"; $c.Left=95; $c.Top=85; $c.Width=270; $c.Height=18; $c.Style=2
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblFra"; $c.Caption="Send fra (valgfritt):"; $c.Left=10; $c.Top=112; $c.Width=85; $c.Height=16
+        $c = $d.Controls.Add("Forms.TextBox.1"); $c.Name="txtFra"; $c.Left=95; $c.Top=109; $c.Width=270; $c.Height=18
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblEmne"; $c.Caption="Emne:"; $c.Left=10; $c.Top=136; $c.Width=80; $c.Height=16
+        $c = $d.Controls.Add("Forms.TextBox.1"); $c.Name="txtEmne"; $c.Left=95; $c.Top=133; $c.Width=270; $c.Height=18
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblTekst"; $c.Caption="Tekst:"; $c.Left=10; $c.Top=160; $c.Width=80; $c.Height=16
+        $c = $d.Controls.Add("Forms.TextBox.1"); $c.Name="txtTekst"; $c.Left=10; $c.Top=178; $c.Width=355; $c.Height=210
+        $c.MultiLine=$true; $c.EnterKeyBehavior=$true; $c.WordWrap=$true; $c.ScrollBars=2
+        $c = $d.Controls.Add("Forms.Label.1"); $c.Name="lblKolonner"; $c.Caption="Kolonner (plassholdere):"; $c.Left=380; $c.Top=64; $c.Width=190; $c.Height=16
+        $c = $d.Controls.Add("Forms.ListBox.1"); $c.Name="lstKolonner"; $c.Left=380; $c.Top=82; $c.Width=190; $c.Height=250
+        $c = $d.Controls.Add("Forms.CommandButton.1"); $c.Name="cmdSettInnEmne"; $c.Caption="Sett inn i emne"; $c.Left=380; $c.Top=338; $c.Width=93; $c.Height=24
+        $c = $d.Controls.Add("Forms.CommandButton.1"); $c.Name="cmdSettInnTekst"; $c.Caption="Sett inn i tekst"; $c.Left=477; $c.Top=338; $c.Width=93; $c.Height=24
+        $c = $d.Controls.Add("Forms.CommandButton.1"); $c.Name="cmdLagre"; $c.Caption="Lagre"; $c.Left=10; $c.Top=398; $c.Width=110; $c.Height=26
+        $c = $d.Controls.Add("Forms.CommandButton.1"); $c.Name="cmdAvbryt"; $c.Caption="Avbryt"; $c.Left=126; $c.Top=398; $c.Width=110; $c.Height=26
+        Start-Sleep -Milliseconds 400
+        $frmMal.CodeModule.AddFromString($formCodeKtsMailMal)
+        $frmMalFrm = Join-Path $tempDir "frmKtsMailMal.frm"
+        $frmMal.Export($frmMalFrm)
+
     } finally {
         if ($tempWb) { $tempWb.Close($false) }
         if ($tempExcel) {
@@ -4394,7 +4651,7 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
     # Fjern dobbeltklikk-blokken FORST (den refererer modKontaktsentralen),
     # og sett den inn igjen SIST, etter at modulen er importert pa nytt.
     try { Remove-DobbeltklikkFraThisWorkbook } catch {}
-    foreach ($navn in @("modKontaktsentralen", "frmKontaktsentralen", "frmKtsOppsett", "frmKtsUavklart", "frmKtsRad")) {
+    foreach ($navn in @("modKontaktsentralen", "frmKontaktsentralen", "frmKtsOppsett", "frmKtsUavklart", "frmKtsRad", "frmKtsMailMal")) {
         try {
             $eksisterende = $vbProject.VBComponents.Item($navn)
             $vbProject.VBComponents.Remove($eksisterende)
@@ -4405,6 +4662,7 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
     $vbProject.VBComponents.Import($frmRadFrm) | Out-Null
     $vbProject.VBComponents.Import($frmOppFrm) | Out-Null
     $vbProject.VBComponents.Import($frmUavFrm) | Out-Null
+    $vbProject.VBComponents.Import($frmMalFrm) | Out-Null
 
     # Gi Excel litt tid til a fullfore registreringen av de nettopp
     # importerte VBA-komponentene for vi setter en Button sin OnAction
