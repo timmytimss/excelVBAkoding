@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.15.0"
+$KtsVersion = "0.15.1"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -818,11 +818,19 @@ Public Function KjørSkann() As Object
                     On Error Resume Next
                     emne = item.Subject
                     mottattTekst = Format(item.ReceivedTime, "dd.mm.yyyy HH:mm")
+                    ' "Undeliverable"-rapporter (NDR) har ofte ingen ReceivedTime
+                    ' eller avsender (g-ndr-tomme-felt) - bruk CreationTime (0.15.1).
+                    If Len(mottattTekst) = 0 Then mottattTekst = Format(item.CreationTime, "dd.mm.yyyy HH:mm")
                     convId = CStr(item.ConversationID)
                     storeId = mappe.StoreID
                     mappeNavn = CStr(mappe.Name)
                     On Error GoTo Feilhandtering
                     avsender = HentAvsenderEpost(item)
+                    If Len(avsender) = 0 Then
+                        Dim mKlasse As String: mKlasse = ""
+                        On Error Resume Next: mKlasse = CStr(item.MessageClass): On Error GoTo Feilhandtering
+                        If LCase(Left$(mKlasse, 6)) = "report" Then avsender = "(ikke levert - systemmelding)"
+                    End If
 
                     If Len(entryId) > 0 Then settDenneSkann(entryId) = True
 
