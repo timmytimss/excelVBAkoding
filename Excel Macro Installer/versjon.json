@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.10.19.2",
-    "dato":  "2026-10-19",
+    "versjon":  "2026.11.02.1",
+    "dato":  "2026-11-02",
     "emi":  "2.9.5.0",
-    "endringer":  "Kontaktsentralen 0.12.1: synkronisering endrer bare celler i Kontrollkolonnen som faktisk er nye, så filtervisningen holder seg."
+    "endringer":  "Kontaktsentralen 0.13.0: uavklarte e-poster med en valgt kategori kan skjules."
 }

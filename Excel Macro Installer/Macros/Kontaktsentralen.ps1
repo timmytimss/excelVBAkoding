@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.12.1"
+$KtsVersion = "0.13.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -1943,9 +1943,52 @@ Public Function KtsSkjemaErApent(ByVal navn As String) As Boolean
 End Function
 
 ' Antall uavklarte e-poster (fra cachen / siste skann) - vises pa knappen.
+' E-poster med kategorien som er valgt som "skjul" i Uavklarte-vinduet
+' telles ikke med (0.13.0).
 Public Function KtsAntallUavklarte() As Long
     If KtsSisteUavklarte Is Nothing Then Exit Function
-    KtsAntallUavklarte = KtsSisteUavklarte.Count
+    Dim skjul As String: skjul = KtsSkjultUavklartKategori()
+    Dim u As Object, n As Long
+    For Each u In KtsSisteUavklarte
+        If Not KtsUavklartErSkjult(u, skjul) Then n = n + 1
+    Next u
+    KtsAntallUavklarte = n
+End Function
+
+Public Function KtsAntallSkjulteUavklarte() As Long
+    If KtsSisteUavklarte Is Nothing Then Exit Function
+    KtsAntallSkjulteUavklarte = KtsSisteUavklarte.Count - KtsAntallUavklarte()
+End Function
+
+' Kategoriene i en e-posts kategoritekst som en liste (Outlook skiller med
+' komma eller semikolon, avhengig av regionsinnstillingene).
+Public Function KtsKategoriListe(ByVal kategorier As String) As Collection
+    Dim res As Collection: Set res = New Collection
+    Dim deler() As String, i As Long, k As String
+    deler = Split(Replace(kategorier, ";", ","), ",")
+    For i = LBound(deler) To UBound(deler)
+        k = Trim(deler(i))
+        If Len(k) > 0 Then res.Add k
+    Next i
+    Set KtsKategoriListe = res
+End Function
+
+' Kategorien som skjuler uavklarte e-poster ("" = ingen). Velges i
+' Uavklarte-vinduet og huskes i arbeidsboken (0.13.0).
+Public Function KtsSkjultUavklartKategori() As String
+    Dim konfig As Object: Set konfig = KtsLesKonfig()
+    If konfig.Exists("KTS_UAVKLART_SKJUL_KATEGORI") Then KtsSkjultUavklartKategori = Trim(CStr(konfig("KTS_UAVKLART_SKJUL_KATEGORI")))
+End Function
+
+Public Function KtsUavklartErSkjult(ByVal u As Object, ByVal skjulKategori As String) As Boolean
+    If Len(skjulKategori) = 0 Then Exit Function
+    Dim k As Variant
+    For Each k In KtsKategoriListe(CStr(u("Kategori")))
+        If StrComp(CStr(k), skjulKategori, vbTextCompare) = 0 Then
+            KtsUavklartErSkjult = True
+            Exit Function
+        End If
+    Next k
 End Function
 
 ' Tilpasser vinduets storrelse til kontrollene i det, uavhengig av hvor
@@ -2152,7 +2195,8 @@ Private Sub Synkroniser(ByVal visMelding As Boolean)
             "Kjent fra tidligere (hoppet over ny matching): " & resultat("AntallKjentFraCache") & vbCrLf & _
             "Nytt matchet direkte: " & resultat("AntallNyeMatchet") & vbCrLf & _
             "Matchet via samtale: " & resultat("AntallMatchetViaSamtale") & vbCrLf & _
-            "Uavklart/flertydig: " & resultat("Uavklarte").Count & vbCrLf & _
+            "Uavklart/flertydig: " & modKontaktsentralen.KtsAntallUavklarte() & _
+                IIf(modKontaktsentralen.KtsAntallSkjulteUavklarte() > 0, " (+ " & modKontaktsentralen.KtsAntallSkjulteUavklarte() & " skjult etter kategori)", "") & vbCrLf & _
             "Fjernet (flyttet, slettet eller uten kategori i Outlook): " & resultat("AntallFjernetFraCache") & vbCrLf & _
             "Rader med status: " & resultat("AntallOppdatertRad")
         MsgBox m, vbInformation, "Kontaktsentralen - synkronisering ferdig"
@@ -3205,30 +3249,127 @@ $formCodeKtsUavklart = @'
 Option Explicit
 
 Private radNumre() As Long
+' Listeindeks i lstUavklarte -> indeks i KtsSisteUavklarte (1-basert). Trengs
+' fordi e-poster med skjult kategori kan vaere tatt ut av lista (0.13.0).
+Private uavIndekser() As Long
+Private mLaster As Boolean
 
 Private Sub UserForm_Initialize()
     lblTittel.Font.Bold = True
     lblTittel.Caption = "Match uavklarte e-poster til rad"
     modKontaktsentralen.KtsStilKnapp cmdMatch, "gronn"
     modKontaktsentralen.KtsStilKnapp cmdTilbake, "blagra"
+    ' "Vis skjulte" huskes aldri - den er alltid av nar vinduet apnes.
+    mLaster = True
+    chkVisSkjulte.Value = False
+    FyllSkjulKategorier
+    mLaster = False
     LastUavklarte
     LastRader
     ForhaandsvelgSisteRad
     modKontaktsentralen.KtsTilpassVindu Me
 End Sub
 
-Private Sub LastUavklarte()
-    lstUavklarte.Clear
+' Nedtrekkslista "Skjul kategori": (ingen) + alle kategorier som finnes pa
+' de uavklarte e-postene, pluss den lagrede (om den ikke finnes lenger).
+Private Sub FyllSkjulKategorier()
+    Dim lagret As String: lagret = modKontaktsentralen.KtsSkjultUavklartKategori()
+    Dim sett As Object: Set sett = CreateObject("Scripting.Dictionary")
+    sett.CompareMode = vbTextCompare
+    Dim u As Object, k As Variant
     If Not modKontaktsentralen.KtsSisteUavklarte Is Nothing Then
-        Dim i As Long, u As Object
-        For i = 1 To modKontaktsentralen.KtsSisteUavklarte.Count
-            Set u = modKontaktsentralen.KtsSisteUavklarte(i)
-            lstUavklarte.AddItem u("Emne")
-            lstUavklarte.List(lstUavklarte.ListCount - 1, 1) = u("Avsender")
-            lstUavklarte.List(lstUavklarte.ListCount - 1, 2) = u("Kategori")
+        For Each u In modKontaktsentralen.KtsSisteUavklarte
+            For Each k In modKontaktsentralen.KtsKategoriListe(CStr(u("Kategori")))
+                If Not sett.Exists(CStr(k)) Then sett.Add CStr(k), True
+            Next k
+        Next u
+    End If
+    If Len(lagret) > 0 And Not sett.Exists(lagret) Then sett.Add lagret, True
+
+    ' Alfabetisk (enkel sortering - fa kategorier).
+    Dim navn() As String, n As Long, i As Long, j As Long, tmp As String
+    n = sett.Count
+    cboSkjulKategori.Clear
+    cboSkjulKategori.AddItem "(ingen)"
+    If n > 0 Then
+        ReDim navn(1 To n)
+        i = 0
+        For Each k In sett.Keys
+            i = i + 1
+            navn(i) = CStr(k)
+        Next k
+        For i = 1 To n - 1
+            For j = i + 1 To n
+                If StrComp(navn(j), navn(i), vbTextCompare) < 0 Then tmp = navn(i): navn(i) = navn(j): navn(j) = tmp
+            Next j
+        Next i
+        For i = 1 To n
+            cboSkjulKategori.AddItem navn(i)
         Next i
     End If
-    lblStatus.Caption = lstUavklarte.ListCount & " uavklart(e) igjen fra siste skanning"
+    cboSkjulKategori.ListIndex = 0
+    If Len(lagret) > 0 Then
+        For i = 1 To cboSkjulKategori.ListCount - 1
+            If StrComp(cboSkjulKategori.List(i), lagret, vbTextCompare) = 0 Then
+                cboSkjulKategori.ListIndex = i
+                Exit For
+            End If
+        Next i
+    End If
+End Sub
+
+Private Function ValgtSkjulKategori() As String
+    If cboSkjulKategori.ListIndex > 0 Then ValgtSkjulKategori = CStr(cboSkjulKategori.Value)
+End Function
+
+Private Sub LastUavklarte()
+    lstUavklarte.Clear
+    Erase uavIndekser
+    Dim skjul As String: skjul = ValgtSkjulKategori()
+    Dim visSkjulte As Boolean: visSkjulte = CBool(chkVisSkjulte.Value)
+    Dim antSkjult As Long, antVist As Long
+    If Not modKontaktsentralen.KtsSisteUavklarte Is Nothing Then
+        Dim i As Long, u As Object, erSkjult As Boolean
+        For i = 1 To modKontaktsentralen.KtsSisteUavklarte.Count
+            Set u = modKontaktsentralen.KtsSisteUavklarte(i)
+            erSkjult = modKontaktsentralen.KtsUavklartErSkjult(u, skjul)
+            If erSkjult Then antSkjult = antSkjult + 1
+            If visSkjulte Or Not erSkjult Then
+                lstUavklarte.AddItem u("Emne")
+                lstUavklarte.List(lstUavklarte.ListCount - 1, 1) = u("Avsender")
+                lstUavklarte.List(lstUavklarte.ListCount - 1, 2) = u("Kategori")
+                antVist = antVist + 1
+                ReDim Preserve uavIndekser(0 To antVist - 1)
+                uavIndekser(antVist - 1) = i
+            End If
+        Next i
+    End If
+    If Len(skjul) > 0 Then
+        chkVisSkjulte.Caption = "Vis skjulte (" & antSkjult & ")"
+        chkVisSkjulte.Enabled = True
+    Else
+        chkVisSkjulte.Caption = "Vis skjulte"
+        chkVisSkjulte.Enabled = False
+    End If
+    lblStatus.Caption = (antVist - IIf(visSkjulte, antSkjult, 0)) & " uavklart(e) igjen fra siste skanning" & _
+        IIf(antSkjult > 0, " (" & antSkjult & " med kategorien """ & skjul & """ er skjult" & IIf(visSkjulte, ", men vises nå)", ")"), "")
+End Sub
+
+' Listeindeks -> indeks i KtsSisteUavklarte, eller 0 hvis ingen er valgt.
+Private Function ValgtUavklartIndeks() As Long
+    If lstUavklarte.ListIndex < 0 Then Exit Function
+    ValgtUavklartIndeks = uavIndekser(lstUavklarte.ListIndex)
+End Function
+
+Private Sub cboSkjulKategori_Change()
+    If mLaster Then Exit Sub
+    modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_UAVKLART_SKJUL_KATEGORI", ValgtSkjulKategori()
+    LastUavklarte
+End Sub
+
+Private Sub chkVisSkjulte_Click()
+    If mLaster Then Exit Sub
+    LastUavklarte
 End Sub
 
 Private Sub LastRader()
@@ -3283,7 +3424,7 @@ Private Sub lstUavklarte_DblClick(ByVal Cancel As MSForms.ReturnBoolean)
     If lstUavklarte.ListIndex < 0 Then Exit Sub
     If modKontaktsentralen.KtsSisteUavklarte Is Nothing Then Exit Sub
     Dim u As Object
-    Set u = modKontaktsentralen.KtsSisteUavklarte(lstUavklarte.ListIndex + 1)
+    Set u = modKontaktsentralen.KtsSisteUavklarte(ValgtUavklartIndeks())
     modKontaktsentralen.KtsAapneMeldingMedId CStr(u("EntryID")), CStr(u("StoreID"))
 End Sub
 
@@ -3321,8 +3462,8 @@ Private Sub cmdMatch_Click()
 
     Dim rad As Long
     rad = radNumre(radIndeks)
-    ' Collection er 1-basert, ListIndex er 0-basert.
-    modKontaktsentralen.KtsMatchUavklartTilRad uavklartIndeks + 1, rad
+    ' Listeindeks -> indeks i samlingen (lista kan ha skjulte e-poster tatt ut).
+    modKontaktsentralen.KtsMatchUavklartTilRad ValgtUavklartIndeks(), rad
 
     LastUavklarte
     LastRader
@@ -3812,7 +3953,22 @@ if ($installertVersjon -eq $nyVersjon -and -not $Force) {
         $lblUavTittel = $frmUav.Designer.Controls.Add("Forms.Label.1")
         $lblUavTittel.Name = "lblTittel"
         $lblUavTittel.Caption = ""
-        $lblUavTittel.Left = 10; $lblUavTittel.Top = 8; $lblUavTittel.Width = 400; $lblUavTittel.Height = 20
+        $lblUavTittel.Left = 10; $lblUavTittel.Top = 8; $lblUavTittel.Width = 280; $lblUavTittel.Height = 20
+
+        # Skjul uavklarte med en valgt kategori (0.13.0). Valget huskes;
+        # "Vis skjulte" huskes aldri.
+        $lblUavSkjul = $frmUav.Designer.Controls.Add("Forms.Label.1")
+        $lblUavSkjul.Name = "lblSkjulKategori"
+        $lblUavSkjul.Caption = "Skjul kategori:"
+        $lblUavSkjul.Left = 300; $lblUavSkjul.Top = 10; $lblUavSkjul.Width = 70; $lblUavSkjul.Height = 16
+        $cboUavSkjul = $frmUav.Designer.Controls.Add("Forms.ComboBox.1")
+        $cboUavSkjul.Name = "cboSkjulKategori"
+        $cboUavSkjul.Left = 372; $cboUavSkjul.Top = 7; $cboUavSkjul.Width = 140; $cboUavSkjul.Height = 18
+        $cboUavSkjul.Style = 2
+        $chkUavVis = $frmUav.Designer.Controls.Add("Forms.CheckBox.1")
+        $chkUavVis.Name = "chkVisSkjulte"
+        $chkUavVis.Caption = "Vis skjulte"
+        $chkUavVis.Left = 520; $chkUavVis.Top = 8; $chkUavVis.Width = 110; $chkUavVis.Height = 18
 
         $lblUavUavklarteLabel = $frmUav.Designer.Controls.Add("Forms.Label.1")
         $lblUavUavklarteLabel.Name = "lblUavklarteLabel"
