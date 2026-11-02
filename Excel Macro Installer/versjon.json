@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.11.02.4",
+    "versjon":  "2026.11.02.5",
     "dato":  "2026-11-02",
     "emi":  "2.9.5.0",
-    "endringer":  "Kontaktsentralen 0.15.1: «Undeliverable»-meldinger får dato og står riktig i Radkontroll."
+    "endringer":  "Kontaktsentralen 0.15.2: «Undeliverable»-meldinger får dato også når de ikke leses på nytt."
 }

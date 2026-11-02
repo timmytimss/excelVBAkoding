@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.15.1"
+$KtsVersion = "0.15.2"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -1035,6 +1035,9 @@ Public Function KjørSkann() As Object
                     resultat("AntallFjernetFraCache") = resultat("AntallFjernetFraCache") + 1
                 Else
                     cd("Kategori") = sjekkKat
+                    ' Ble ikke lest i skanningen (f.eks. NDR utenfor startpunkt-
+                    ' filteret): fyll inn dato/avsender hvis de mangler (0.15.2).
+                    KtsFyllFeltFraItem cd, sjekkItem
                 End If
             End If
         End If
@@ -1233,6 +1236,41 @@ Private Function HentMottakerAdresser(ByVal item As Object) As String
     If Len(s) > 0 Then s = Mid$(s, 2)
     HentMottakerAdresser = s
 End Function
+
+' Fyller tom dato (og tom avsender for "Undeliverable"-rapporter) i en
+' oppforing fra selve Outlook-elementet (0.15.2). NDR-rapporter har ingen
+' ReceivedTime og kan falle utenfor startpunkt-filteret i skanningen, sa de
+' ble aldri lest pa nytt og fikk aldri dato.
+Public Sub KtsFyllFeltFraItem(ByVal d As Object, ByVal itm As Object)
+    If itm Is Nothing Then Exit Sub
+    Dim s As String, k As String
+    On Error Resume Next
+    If Len(CStr(d("Mottatt"))) = 0 Then
+        s = ""
+        s = Format(itm.ReceivedTime, "dd.mm.yyyy HH:mm")
+        If Len(s) = 0 Then s = Format(itm.CreationTime, "dd.mm.yyyy HH:mm")
+        If Len(s) > 0 Then d("Mottatt") = s
+    End If
+    If Len(CStr(d("Avsender"))) = 0 Then
+        k = ""
+        k = CStr(itm.MessageClass)
+        If LCase(Left$(k, 6)) = "report" Then d("Avsender") = "(ikke levert - systemmelding)"
+    End If
+    On Error GoTo 0
+End Sub
+
+' Som over, men slar opp elementet selv (brukt av Radkontroll for oppforinger
+' som fortsatt mangler dato).
+Public Sub KtsFyllManglendeFelt(ByVal d As Object)
+    If Len(CStr(d("Mottatt"))) > 0 And Len(CStr(d("Avsender"))) > 0 Then Exit Sub
+    Dim olApp As Object, itm As Object
+    On Error Resume Next
+    Set olApp = GetObject(, "Outlook.Application")
+    If olApp Is Nothing Then Exit Sub
+    Set itm = olApp.GetNamespace("MAPI").GetItemFromID(CStr(d("EntryID")), CStr(d("StoreID")))
+    On Error GoTo 0
+    KtsFyllFeltFraItem d, itm
+End Sub
 
 ' "dd.mm.yyyy HH:mm" -> Date, uavhengig av regionsinnstillinger. 0 hvis ugyldig.
 Public Function KtsTekstTilDato(ByVal s As String) As Date
@@ -3271,6 +3309,7 @@ Private Sub LastMeldinger()
         End If
         If Not kilde Is Nothing Then
             For i = 1 To kilde.Count
+                If s = 0 Then modKontaktsentralen.KtsFyllManglendeFelt kilde(i)
                 n = n + 1
                 ReDim Preserve datoer(1 To n): ReDim Preserve ut(1 To n): ReDim Preserve idx(1 To n)
                 datoer(n) = TilDato(CStr(kilde(i)("Mottatt")))
