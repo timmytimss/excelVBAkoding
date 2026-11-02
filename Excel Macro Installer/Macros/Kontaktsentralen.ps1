@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.14.0"
+$KtsVersion = "0.15.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -796,7 +796,21 @@ Public Function KjørSkann() As Object
                     End If
                 End If
 
-                If Len(kategorier) > 0 Then
+                ' Hurtigvei (0.15.0): en e-post som allerede er koblet til en rad
+                    ' (og har dato i cachen) trenger bare ny kategori - emne,
+                    ' avsender osv. endres ikke, og a lese dem fra Outlook for hver
+                    ' e-post ved hver synkronisering var det som tok tid.
+                Dim hurtig As Boolean: hurtig = False
+                If Len(kategorier) > 0 And Len(entryId) > 0 Then
+                    If cache.Exists(entryId) Then
+                        If CLng(cache(entryId)("RadNr")) > 0 And Len(CStr(cache(entryId)("Mottatt"))) > 0 Then hurtig = True
+                    End If
+                End If
+                If hurtig Then
+                    resultat("AntallKategorisert") = resultat("AntallKategorisert") + 1
+                    resultat("AntallKjentFraCache") = resultat("AntallKjentFraCache") + 1
+                    cache(entryId)("Kategori") = kategorier
+                ElseIf Len(kategorier) > 0 Then
                     resultat("AntallKategorisert") = resultat("AntallKategorisert") + 1
 
                     Dim emne As String, avsender As String, mottattTekst As String, convId As String, storeId As String, mappeNavn As String
@@ -867,14 +881,25 @@ Public Function KjørSkann() As Object
     '     samtalen). Trenger ingen kategori og pavirker ikke status.
     '     Sendte e-poster som ikke kan kobles til en rad, hoppes over (ikke
     '     uavklart - det ville fylt lista med intern e-post). ---
+    ' Inkrementelt (0.15.0): sendte e-poster endrer seg ikke, sa bare det som
+    ' er sendt siden forrige synkronisering (minus 2 dagers margin) leses.
+    ' Eldre sendte e-poster ligger allerede i cachen. Tomt KTS_SENDT_SIST
+    ' (forste gang, eller etter at startpunktet er endret) = alt fra startpunktet.
     resultat("AntallSendtKoblet") = 0
+    Dim sendtVinduStart As Date, harSendtVindu As Boolean
+    If harStartpunkt Then sendtVinduStart = startpunkt: harSendtVindu = True
+    Dim sistSendt As Date
+    If konfig.Exists("KTS_SENDT_SIST") Then sistSendt = KtsTekstTilDato(CStr(konfig("KTS_SENDT_SIST")))
+    If sistSendt > 0 Then
+        If (sistSendt - 2) > sendtVinduStart Or Not harSendtVindu Then sendtVinduStart = sistSendt - 2: harSendtVindu = True
+    End If
     Dim sendtMappe As Object: Set sendtMappe = KtsFinnSendtMappe(deltPostboks)
     If Not sendtMappe Is Nothing Then
         On Error Resume Next: skannedeMapper(LCase(CStr(sendtMappe.FolderPath))) = True: Err.Clear: On Error GoTo Feilhandtering
         Dim sItems As Object: Set sItems = Nothing
-        If harStartpunkt Then
+        If harSendtVindu Then
             On Error Resume Next
-            Set sItems = sendtMappe.Items.Restrict("[SentOn] >= '" & Format(startpunkt, "ddddd h:nn AMPM") & "'")
+            Set sItems = sendtMappe.Items.Restrict("[SentOn] >= '" & Format(sendtVinduStart, "ddddd h:nn AMPM") & "'")
             Err.Clear
             On Error GoTo Feilhandtering
         End If
@@ -890,10 +915,13 @@ Public Function KjørSkann() As Object
             If sKlasse = 43 Then ' olMail
                 sEid = ""
                 On Error Resume Next: sEid = CStr(sItem.EntryID): On Error GoTo Feilhandtering
-                If Len(sEid) > 0 Then
+                If Len(sEid) > 0 And cache.Exists(sEid) Then
+                    ' Allerede behandlet (koblet eller ikke) - ingenting a gjore.
+                    settDenneSkann(sEid) = True
+                    If CLng(cache(sEid)("RadNr")) > 0 Then resultat("AntallSendtKoblet") = resultat("AntallSendtKoblet") + 1
+                ElseIf Len(sEid) > 0 Then
                     settDenneSkann(sEid) = True
                     sRad = 0
-                    If cache.Exists(sEid) Then sRad = CLng(cache(sEid)("RadNr"))
                     sConv = "": sTil = ""
                     On Error Resume Next: sConv = CStr(sItem.ConversationID): On Error GoTo Feilhandtering
                     sTil = HentMottakerAdresser(sItem)
@@ -922,12 +950,22 @@ Public Function KjørSkann() As Object
                         If cache.Exists(sEid) Then cache.Remove sEid
                         cache.Add sEid, sd
                         resultat("AntallSendtKoblet") = resultat("AntallSendtKoblet") + 1
-                    ElseIf cache.Exists(sEid) Then
-                        cache.Remove sEid
+                    Else
+                        ' Ikke koblet: husk den likevel (RadNr 0), sa den ikke
+                        ' matches pa nytt ved hver synkronisering. Vises ikke.
+                        Dim sx As Object: Set sx = CreateObject("Scripting.Dictionary")
+                        sx("EntryID") = sEid: sx("RadNr") = 0: sx("Retning") = "Ut"
+                        sx("StoreID") = "": sx("Emne") = "": sx("Kategori") = "": sx("Mappe") = ""
+                        sx("Mottatt") = "": sx("Avsender") = "": sx("ConversationID") = sConv: sx("Arsak") = "Ingen match"
+                        On Error Resume Next
+                        sx("Mottatt") = Format(sItem.SentOn, "dd.mm.yyyy HH:mm")
+                        On Error GoTo Feilhandtering
+                        cache.Add sEid, sx
                     End If
                 End If
             End If
         Next si
+        KtsSkrivKonfigVerdi "KTS_SENDT_SIST", Format(Now, "dd.mm.yyyy HH:mm")
     End If
 
     ' --- Fjern uavklarte cache-oppforinger som IKKE ble sett i denne
@@ -945,7 +983,17 @@ Public Function KjørSkann() As Object
     Dim sjekkItem As Object, sjekkKat As String
     For Each ck In cache.Keys
         Set cd = cache(ck)
-        If Not settDenneSkann.Exists(CStr(ck)) Then
+        Dim ckUt As Boolean: ckUt = False
+        If cd.Exists("Retning") Then ckUt = (CStr(cd("Retning")) = "Ut")
+        If Not settDenneSkann.Exists(CStr(ck)) And ckUt Then
+            ' Sendt e-post som ikke ble sett: bare fjernet hvis den er sendt
+            ' INNENFOR vinduet som ble lest (da er den slettet/flyttet). Eldre
+            ' sendte e-poster ble ikke lest og beholdes uten oppslag (0.15.0).
+            If Not harSendtVindu Or KtsTekstTilDato(CStr(cd("Mottatt"))) >= sendtVinduStart Then
+                fjernListe.Add CStr(ck)
+                If CLng(cd("RadNr")) > 0 Then resultat("AntallFjernetFraCache") = resultat("AntallFjernetFraCache") + 1
+            End If
+        ElseIf Not settDenneSkann.Exists(CStr(ck)) Then
             If CLng(cd("RadNr")) <= 0 Then
                 fjernListe.Add CStr(ck)
             Else
@@ -1176,6 +1224,15 @@ Private Function HentMottakerAdresser(ByVal item As Object) As String
     On Error GoTo 0
     If Len(s) > 0 Then s = Mid$(s, 2)
     HentMottakerAdresser = s
+End Function
+
+' "dd.mm.yyyy HH:mm" -> Date, uavhengig av regionsinnstillinger. 0 hvis ugyldig.
+Public Function KtsTekstTilDato(ByVal s As String) As Date
+    On Error Resume Next
+    s = Trim(s)
+    If Len(s) < 10 Then Exit Function
+    KtsTekstTilDato = DateSerial(CInt(Mid$(s, 7, 4)), CInt(Mid$(s, 4, 2)), CInt(Left$(s, 2)))
+    If Len(s) >= 16 Then KtsTekstTilDato = KtsTekstTilDato + TimeSerial(CInt(Mid$(s, 12, 2)), CInt(Mid$(s, 15, 2)), 0)
 End Function
 
 ' Den delte postboksens mappe for sendte e-poster (navnet avhenger av spraket).
@@ -3084,6 +3141,8 @@ Private Sub cmdLagre_Click()
     modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_KOL_GJENKJENNING", g
     modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_KOL_RESPONS", kontrollkolonne
     modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_STARTPUNKT", TryggTekst(txtStartpunkt.Value)
+    ' Nytt startpunkt: les alle sendte e-poster fra det pa nytt ved neste synk.
+    modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_SENDT_SIST", ""
     modKontaktsentralen.KtsSkrivKonfigVerdi "KTS_KATEGORI_PRIORITET", KategoriPrioritet()
 
     If Not gammelCache Is Nothing Then modKontaktsentralen.KtsLagreCache gammelCache
@@ -3128,9 +3187,8 @@ Private Sub UserForm_Initialize()
     laster = False
     lblTittel.Font.Bold = True
     lblTittel.Caption = "Radkontroll - " & modKontaktsentralen.KtsRadNavnForVisning(rad)
-    modKontaktsentralen.KtsStilKnapp cmdAapneOutlook, "bla"
-    modKontaktsentralen.KtsStilKnapp cmdMatchUavklart, "oransje"
-    modKontaktsentralen.KtsStilKnapp cmdHovedmeny, "blagra"
+    ' Handlingsknappene har vanlig, ufarget stil (0.15.0) - farge er forbeholdt
+    ' kategoriknappene, ellers ble det forvirrende.
     Set valgt = CreateObject("Scripting.Dictionary")
     Set opprinnelig = CreateObject("Scripting.Dictionary")
     Set origRekkefolge = New Collection
@@ -3176,7 +3234,7 @@ Private Function TilDato(ByVal s As String) As Date
     If Len(s) >= 16 Then TilDato = TilDato + TimeSerial(CInt(Mid$(s, 12, 2)), CInt(Mid$(s, 15, 2)), 0)
 End Function
 
-' Mottatte og sendte e-poster for raden i EN liste, nyeste forst (0.14.0).
+' Mottatte og sendte e-poster for raden i EN liste, kronologisk (0.14.0/0.15.0).
 ' Nedtrekkslista "Vis" kan begrense til bare mottatte eller bare sendte.
 Private Sub LastMeldinger()
     Dim rad As Long: rad = modKontaktsentralen.KtsValgtRad
@@ -3214,11 +3272,12 @@ Private Sub LastMeldinger()
         End If
     Next s
 
-    ' Nyeste forst (enkel sortering - en rad har sjelden mange e-poster).
+    ' Kronologisk, eldste forst, inn og ut om hverandre (enkel sortering - en
+    ' rad har sjelden mange e-poster).
     Dim j As Long, td As Date, tb As Boolean, tl As Long
     For i = 1 To n - 1
         For j = i + 1 To n
-            If datoer(j) > datoer(i) Then
+            If datoer(j) < datoer(i) Then
                 td = datoer(i): datoer(i) = datoer(j): datoer(j) = td
                 tb = ut(i): ut(i) = ut(j): ut(j) = tb
                 tl = idx(i): idx(i) = idx(j): idx(j) = tl
@@ -3277,22 +3336,23 @@ Private Sub ByggKnapper(ByVal rad As Long)
     For i = 1 To MAKS_KNAPPER
         Set knapp = Me.Controls("cmdKat" & i)
         If i <= kategoriNavn.Count Then
-            b = Len(kategoriNavn(i)) * 6.5 + 26
-            If b < 70 Then b = 70
-            If b > 220 Then b = 220
+            ' Mindre kategoriknapper (0.15.0).
+            b = Len(kategoriNavn(i)) * 5.6 + 16
+            If b < 52 Then b = 52
+            If b > 180 Then b = 180
             If x + b > 730 And x > 10 Then
                 x = 10
-                y = y + 30
+                y = y + 23
             End If
-            knapp.Left = x: knapp.Top = y: knapp.Width = b: knapp.Height = 24
+            knapp.Left = x: knapp.Top = y: knapp.Width = b: knapp.Height = 19
             knapp.Caption = kategoriNavn(i)
             knapp.Visible = True
-            x = x + b + 6
+            x = x + b + 4
         Else
             knapp.Visible = False
         End If
     Next i
-    Dim bunn As Single: bunn = y + 24
+    Dim bunn As Single: bunn = y + 19
     If kategoriNavn.Count > MAKS_KNAPPER Then lblKategorier.ControlTipText = "Bare de " & MAKS_KNAPPER & " forste kategoriene vises som knapper."
     Dim t As Single: t = bunn + 16
     cmdLagreKategori.Top = t: cmdAngre.Top = t: cmdAapneOutlook.Top = t: cmdMatchUavklart.Top = t: cmdHovedmeny.Top = t
@@ -3323,12 +3383,8 @@ Private Sub OppdaterKnapper()
     cmdLagreKategori.Enabled = endret
     cmdAngre.Enabled = endret
     If endret Then
-        modKontaktsentralen.KtsStilKnapp cmdLagreKategori, "gronn"
-        modKontaktsentralen.KtsStilKnapp cmdAngre, "blagra"
         lblKategorier.Caption = "Kategorier på valgt e-post - ulagrede endringer. Trykk Lagre i Outlook eller Angre."
     Else
-        modKontaktsentralen.KtsStilKnapp cmdLagreKategori, "gra"
-        modKontaktsentralen.KtsStilKnapp cmdAngre, "gra"
         If valgtIndeks < 0 Then
             lblKategorier.Caption = "Velg en e-post i lista for å endre kategoriene."
         ElseIf ValgtErSendt() Then

@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.11.02.2",
+    "versjon":  "2026.11.02.3",
     "dato":  "2026-11-02",
     "emi":  "2.9.5.0",
-    "endringer":  "Kontaktsentralen 0.14.0: Radkontroll viser også e-poster sendt fra den delte postboksen."
+    "endringer":  "Kontaktsentralen 0.15.0: raskere synkronisering, kronologisk e-postliste og roligere knapper i Radkontroll."
 }
