@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.11.02.7",
-    "dato":  "2026-11-02",
+    "versjon":  "2026.11.03.1",
+    "dato":  "2026-11-03",
     "emi":  "2.9.5.0",
-    "endringer":  "Kontaktsentralen 0.16.0: Send mail med forhåndsutfylt mal og Skann nå i Radkontroll."
+    "endringer":  "Kontaktsentralen 0.17.0: synkronisering henger ikke lenger når flere er inne i fila samtidig."
 }

@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.16.0"
+$KtsVersion = "0.17.0"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -512,34 +512,69 @@ End Function
 ' typisk noen hundre/fa tusen rader, ikke stor nok til at delta-oppdatering
 ' er verdt kompleksiteten/risikoen).
 Public Sub KtsLagreCache(ByVal cache As Object)
+    ' 0.17.0: bygges som ETT 2D-array og skrives i ETT kall - og bare hvis noe
+    ' faktisk er endret. Tidligere ble hele arket tomt og skrevet celle for
+    ' celle ved hver synkronisering (tusenvis av enkeltendringer). Nar flere
+    ' er inne i samme fil (samtidig redigering) ma hver endring synkroniseres
+    ' til de andre, og da ble synkroniseringen staende i det uendelige.
     KtsSettRadNokler cache
     Dim ws As Worksheet: Set ws = KtsCacheFane()
+    Dim n As Long: n = cache.Count
+    Dim nyV() As Variant, r As Long, key As Variant, d As Object
+    If n > 0 Then
+        ReDim nyV(1 To n, 1 To 12)
+        For Each key In cache.Keys
+            Set d = cache(key)
+            r = r + 1
+            nyV(r, 1) = CStr(d("EntryID"))
+            nyV(r, 2) = CStr(d("StoreID"))
+            nyV(r, 3) = CStr(d("RadNr"))
+            nyV(r, 4) = CStr(d("Kategori"))
+            nyV(r, 5) = CStr(d("Emne"))
+            nyV(r, 6) = CStr(d("Avsender"))
+            nyV(r, 7) = CStr(d("Mottatt"))
+            nyV(r, 8) = CStr(d("ConversationID"))
+            If d.Exists("Arsak") Then nyV(r, 9) = CStr(d("Arsak")) Else nyV(r, 9) = ""
+            If d.Exists("Mappe") Then nyV(r, 10) = CStr(d("Mappe")) Else nyV(r, 10) = ""
+            If d.Exists("RadNokkel") Then nyV(r, 11) = CStr(d("RadNokkel")) Else nyV(r, 11) = ""
+            If d.Exists("Retning") Then nyV(r, 12) = CStr(d("Retning")) Else nyV(r, 12) = ""
+        Next key
+    End If
+
+    ' Overskrifter - bare hvis de mangler.
+    Dim hode As Variant, j As Long
+    hode = Array("EntryID", "StoreID", "RadNr", "Kategori", "Emne", "Avsender", "Mottatt", "ConversationID", "Arsak", "Mappe", "RadNokkel", "Retning")
+    For j = 0 To 11
+        If CStr(ws.Cells(1, j + 1).Value) <> hode(j) Then ws.Cells(1, j + 1).Value = hode(j)
+    Next j
+
+    ' Ingenting endret? Da skrives ingenting.
     Dim sisteRad As Long: sisteRad = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If sisteRad < 1 Then sisteRad = 1
+    Dim lik As Boolean, gml As Variant, i As Long, gv As String
+    If sisteRad - 1 = n Then
+        lik = True
+        If n > 0 Then
+            gml = ws.Range(ws.Cells(2, 1), ws.Cells(n + 1, 12)).Value
+            For i = 1 To n
+                For j = 1 To 12
+                    If IsError(gml(i, j)) Then gv = "#" Else gv = CStr(gml(i, j))
+                    If gv <> CStr(nyV(i, j)) Then
+                        lik = False
+                        Exit For
+                    End If
+                Next j
+                If Not lik Then Exit For
+            Next i
+        End If
+    End If
+    If lik Then Exit Sub
+
+    ' Tekstformat pa alle kolonnene, ellers gjor Excel om "0012" til 12 og
+    ' "25.09.2026 07:48" til en dato - og da ser alt "endret" ut neste gang.
+    ws.Range("A:L").NumberFormat = "@"
     If sisteRad > 1 Then ws.Range(ws.Cells(2, 1), ws.Cells(sisteRad, 12)).ClearContents
-    ws.Cells(1, 9).Value = "Arsak"
-    ws.Cells(1, 10).Value = "Mappe"
-    ws.Cells(1, 11).Value = "RadNokkel"
-    ws.Cells(1, 12).Value = "Retning"
-    ' Tekstformat, ellers gjor Excel om en nokkel som "0012" til tallet 12.
-    ws.Columns(11).NumberFormat = "@"
-    Dim r As Long: r = 2
-    Dim key As Variant, d As Object
-    For Each key In cache.Keys
-        Set d = cache(key)
-        ws.Cells(r, 1).Value = d("EntryID")
-        ws.Cells(r, 2).Value = d("StoreID")
-        ws.Cells(r, 3).Value = d("RadNr")
-        ws.Cells(r, 4).Value = d("Kategori")
-        ws.Cells(r, 5).Value = d("Emne")
-        ws.Cells(r, 6).Value = d("Avsender")
-        ws.Cells(r, 7).Value = d("Mottatt")
-        ws.Cells(r, 8).Value = d("ConversationID")
-        If d.Exists("Arsak") Then ws.Cells(r, 9).Value = d("Arsak") Else ws.Cells(r, 9).Value = ""
-        If d.Exists("Mappe") Then ws.Cells(r, 10).Value = d("Mappe") Else ws.Cells(r, 10).Value = ""
-        If d.Exists("RadNokkel") Then ws.Cells(r, 11).Value = CStr(d("RadNokkel")) Else ws.Cells(r, 11).Value = ""
-        If d.Exists("Retning") Then ws.Cells(r, 12).Value = CStr(d("Retning")) Else ws.Cells(r, 12).Value = ""
-        r = r + 1
-    Next key
+    If n > 0 Then ws.Range(ws.Cells(2, 1), ws.Cells(n + 1, 12)).Value = nyV
 End Sub
 
 ' Bygger de session-variablene dashbordet/detaljsiden leser (KtsSisteTreff/
@@ -1048,6 +1083,10 @@ Public Function KjørSkann() As Object
 
     ' --- Lagre oppdatert cache og gjenoppbygg de session-variablene som
     '     dashbord/detaljside leser, fra HELE cachen (inkl. uavklarte). ---
+    ' Skjermoppdatering, hendelser og automatisk beregning av mens det
+    ' skrives (0.17.0) - ellers regner arbeidsboken alle formler pa nytt for
+    ' hver celle som endres. Settes tilbake pa slutten og ved feil.
+    KtsPauseExcel True
     KtsLagreCache cache
     KtsGjenoppbyggSessionFraCache cache
     resultat.Add "Uavklarte", KtsSisteUavklarte
@@ -1078,10 +1117,12 @@ Public Function KjørSkann() As Object
         End If
     Next rr
     KtsFormaterKontrollkolonne tbl, kontrollKolNr, KtsLesKonfig()
+    KtsPauseExcel False
 
     Set KjørSkann = resultat
     Exit Function
 Feilhandtering:
+    KtsPauseExcel False
     Dim feilResultat As Object: Set feilResultat = CreateObject("Scripting.Dictionary")
     feilResultat("Feil") = "Uventet feil under synkronisering (VBA-feil " & Err.Number & ": " & Err.Description & ")."
     Set KjørSkann = feilResultat
@@ -1334,6 +1375,31 @@ Public Sub KtsApneMailForRad(ByVal rad As Long)
         Else
             m.HTMLBody = inn & html
         End If
+    End If
+    On Error GoTo 0
+End Sub
+
+' Slar av (True) / tilbake (False) skjermoppdatering, hendelser og automatisk
+' beregning rundt store skrivinger (0.17.0). Husker hva som var satt, og
+' setter tilbake akkurat det.
+Public Sub KtsPauseExcel(ByVal paa As Boolean)
+    Static aktiv As Boolean, skjerm As Boolean, hendelser As Boolean, beregning As Long
+    On Error Resume Next
+    If paa Then
+        If aktiv Then Exit Sub
+        skjerm = Application.ScreenUpdating
+        hendelser = Application.EnableEvents
+        beregning = Application.Calculation
+        Application.ScreenUpdating = False
+        Application.EnableEvents = False
+        Application.Calculation = -4135 ' xlCalculationManual
+        aktiv = True
+    Else
+        If Not aktiv Then Exit Sub
+        Application.Calculation = beregning
+        Application.EnableEvents = hendelser
+        Application.ScreenUpdating = skjerm
+        aktiv = False
     End If
     On Error GoTo 0
 End Sub
