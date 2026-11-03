@@ -1236,7 +1236,7 @@ $mainCode = @'
 Attribute VB_Name = "modNettskjema"
 Option Explicit
 
-Public Const NETTSKJEMA_HENTER_VERSION As String = "3.25.0"
+Public Const NETTSKJEMA_HENTER_VERSION As String = "3.26.0"
 
 ' 3.22.1 - Fjernet raden under listen (antall valgt, hjelpetekst, Velg alle/
 '          Fjern alle) fra hovedmenyen; listen er høyere i stedet.
@@ -2081,10 +2081,19 @@ Public Sub WriteRowsToSheet(ByVal RowDicts As Collection, ByVal Columns As Colle
         Exit Sub
     End If
 
+    ' Under selve skrivingen: ingen skjermoppdatering, hendelser eller
+    ' automatisk utregning (3.26.0). Ellers regnes hele arbeidsboken pa nytt
+    ' for hver rad som skrives, noe som blir svart tregt nar flere er inne i
+    ' fila samtidig. Settes tilbake pa slutten og ved feil.
+    NsPauseExcel True
+    On Error GoTo SkrivFeil
+
     ' Sørg for at tabellen har alle registrerte kolonner. Nye spørsmål kan
     ' derfor legges til uten Unlist/rebuild. Eksisterende ListObject beholdes.
+    Dim nyeKolonner As Boolean
     Do While tbl.ListColumns.Count < nCols
         tbl.ListColumns.Add
+        nyeKolonner = True
     Loop
 
     ' Hold overskriftene synkronisert med registrert kolonnerekkefølge/alias.
@@ -2107,10 +2116,20 @@ Public Sub WriteRowsToSheet(ByVal RowDicts As Collection, ByVal Columns As Colle
     Set existingRows = CreateObject("Scripting.Dictionary")
     existingRows.CompareMode = vbTextCompare
 
+    ' Les hele tabellen i ETT kall (3.26.0) - brukes bade til a finne
+    ' submissionId og til a hoppe over rader som er helt uendret.
+    Dim gamle As Variant, gamleRader As Long
     If Not tbl.DataBodyRange Is Nothing Then
-        For r = 1 To tbl.ListRows.Count
+        gamleRader = tbl.ListRows.Count
+        If gamleRader = 1 And tbl.ListColumns.Count = 1 Then
+            ReDim gamle(1 To 1, 1 To 1)
+            gamle(1, 1) = tbl.DataBodyRange.Value
+        Else
+            gamle = tbl.DataBodyRange.Value
+        End If
+        For r = 1 To gamleRader
             Dim existingId As String
-            existingId = CStr(tbl.DataBodyRange.Cells(r, 1).Value)
+            If IsError(gamle(r, 1)) Then existingId = "" Else existingId = CStr(gamle(r, 1))
             If existingId <> "" Then
                 If Not existingRows.Exists(existingId) Then existingRows.Add existingId, r
             End If
@@ -2185,11 +2204,66 @@ Public Sub WriteRowsToSheet(ByVal RowDicts As Collection, ByVal Columns As Colle
                 rowArr(1, c) = Empty
             End If
         Next c
-        ws.Range(tbl.DataBodyRange.Cells(targetRow, 1), tbl.DataBodyRange.Cells(targetRow, nCols)).Value = rowArr
+
+        ' Hopp over rader der ingenting er endret (3.26.0). Ved hver henting
+        ' kommer ALLE svar tilbake, og tidligere ble hver eneste rad skrevet
+        ' pa nytt - hundrevis av endringer selv nar ingenting var nytt.
+        Dim uendret As Boolean, gv As String, nv As String
+        uendret = False
+        If targetRow <= gamleRader And tbl.ListColumns.Count >= nCols And Not nyeKolonner Then
+            If UBound(gamle, 2) >= nCols Then
+                uendret = True
+                For c = 1 To nCols
+                    If IsError(gamle(targetRow, c)) Then gv = "#FEIL" Else gv = CStr(gamle(targetRow, c))
+                    If IsEmpty(rowArr(1, c)) Then nv = "" Else nv = CStr(rowArr(1, c))
+                    If gv <> nv Then
+                        uendret = False
+                        Exit For
+                    End If
+                Next c
+            End If
+        End If
+        If Not uendret Then
+            ws.Range(tbl.DataBodyRange.Cells(targetRow, 1), tbl.DataBodyRange.Cells(targetRow, nCols)).Value = rowArr
+        End If
     Next rowDict
 
     VerifyAndRepairTable tbl, TargetSheetName
-    ws.Columns.AutoFit
+    ' Kolonnebredden tilpasses bare nar det er kommet nye rader eller kolonner
+    ' (3.26.0) - ikke ved hver henting, sa egne kolonnebredder blir staende.
+    If NewRowCount > 0 Or nyeKolonner Then ws.Columns.AutoFit
+    NsPauseExcel False
+    Exit Sub
+SkrivFeil:
+    Dim feilNr As Long, feilKilde As String, feilTekst As String
+    feilNr = Err.Number: feilKilde = Err.Source: feilTekst = Err.Description
+    NsPauseExcel False
+    Err.Raise feilNr, feilKilde, feilTekst
+End Sub
+
+' Slar av (True) / tilbake (False) skjermoppdatering, hendelser og automatisk
+' beregning rundt skriving til tabellen (3.26.0). Husker hva som var satt, og
+' setter tilbake akkurat det.
+Public Sub NsPauseExcel(ByVal paa As Boolean)
+    Static aktiv As Boolean, skjerm As Boolean, hendelser As Boolean, beregning As Long
+    On Error Resume Next
+    If paa Then
+        If aktiv Then Exit Sub
+        skjerm = Application.ScreenUpdating
+        hendelser = Application.EnableEvents
+        beregning = Application.Calculation
+        Application.ScreenUpdating = False
+        Application.EnableEvents = False
+        Application.Calculation = -4135 ' xlCalculationManual
+        aktiv = True
+    Else
+        If Not aktiv Then Exit Sub
+        Application.Calculation = beregning
+        Application.EnableEvents = hendelser
+        Application.ScreenUpdating = skjerm
+        aktiv = False
+    End If
+    On Error GoTo 0
 End Sub
 
 ' ---- Logging (selvhelbredende - oppretter Log-arket ved behov) ----
