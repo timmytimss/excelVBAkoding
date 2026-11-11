@@ -1,6 +1,6 @@
 {
-    "versjon":  "2026.11.03.2",
-    "dato":  "2026-11-03",
+    "versjon":  "2026.11.11.1",
+    "dato":  "2026-11-11",
     "emi":  "2.9.5.0",
-    "endringer":  "Nettskjema-henter 3.26.0: raskere oppdatering, også når flere er inne i fila samtidig."
+    "endringer":  "Kontaktsentralen 0.17.1: sendte e-poster kobles også når en rad får ny kontaktperson senere."
 }

@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 # formCodeKontaktsentralen/formCodeKtsOppsett) - se excel-vba-installer-pattern
 # i minnet for hvorfor: uten en bump gjor installeren ingenting pa neste
 # kjoring selv om koden faktisk er endret.
-$KtsVersion = "0.17.0"
+$KtsVersion = "0.17.1"
 
 # ============================================================
 # Kontaktsentralen - alt-i-en installer/oppdaterer.
@@ -929,10 +929,17 @@ Public Function KjørSkann() As Object
     ' Eldre sendte e-poster ligger allerede i cachen. Tomt KTS_SENDT_SIST
     ' (forste gang, eller etter at startpunktet er endret) = alt fra startpunktet.
     resultat("AntallSendtKoblet") = 0
+    ' Er e-post- eller gjenkjenningskolonnene endret siden sist (f.eks. ny
+    ' kontaktperson pa en rad), provas alle ukoblede sendte e-poster pa nytt,
+    ' og hele perioden fra startpunktet leses (0.17.1). Ellers ble en sendt
+    ' e-post som ikke passet noen rad DA, aldri koblet senere.
+    Dim tabellSig As String: tabellSig = KtsTabellSignatur(tbl, epostKolonner, gjenkjenningKolonner)
+    Dim provSendtPaNytt As Boolean: provSendtPaNytt = True
+    If konfig.Exists("KTS_SENDT_TABELLSIG") Then provSendtPaNytt = (CStr(konfig("KTS_SENDT_TABELLSIG")) <> tabellSig)
     Dim sendtVinduStart As Date, harSendtVindu As Boolean
     If harStartpunkt Then sendtVinduStart = startpunkt: harSendtVindu = True
     Dim sistSendt As Date
-    If konfig.Exists("KTS_SENDT_SIST") Then sistSendt = KtsTekstTilDato(CStr(konfig("KTS_SENDT_SIST")))
+    If konfig.Exists("KTS_SENDT_SIST") And Not provSendtPaNytt Then sistSendt = KtsTekstTilDato(CStr(konfig("KTS_SENDT_SIST")))
     If sistSendt > 0 Then
         If (sistSendt - 2) > sendtVinduStart Or Not harSendtVindu Then sendtVinduStart = sistSendt - 2: harSendtVindu = True
     End If
@@ -958,7 +965,15 @@ Public Function KjørSkann() As Object
             If sKlasse = 43 Then ' olMail
                 sEid = ""
                 On Error Resume Next: sEid = CStr(sItem.EntryID): On Error GoTo Feilhandtering
-                If Len(sEid) > 0 And cache.Exists(sEid) Then
+                Dim sKjent As Boolean: sKjent = False
+                If Len(sEid) > 0 Then
+                    If cache.Exists(sEid) Then
+                        sKjent = True
+                        ' Ukoblet fra for, og tabellen er endret: prov pa nytt.
+                        If provSendtPaNytt And CLng(cache(sEid)("RadNr")) <= 0 Then sKjent = False
+                    End If
+                End If
+                If sKjent Then
                     ' Allerede behandlet (koblet eller ikke) - ingenting a gjore.
                     settDenneSkann(sEid) = True
                     If CLng(cache(sEid)("RadNr")) > 0 Then resultat("AntallSendtKoblet") = resultat("AntallSendtKoblet") + 1
@@ -1003,12 +1018,14 @@ Public Function KjørSkann() As Object
                         On Error Resume Next
                         sx("Mottatt") = Format(sItem.SentOn, "dd.mm.yyyy HH:mm")
                         On Error GoTo Feilhandtering
+                        If cache.Exists(sEid) Then cache.Remove sEid
                         cache.Add sEid, sx
                     End If
                 End If
             End If
         Next si
         KtsSkrivKonfigVerdi "KTS_SENDT_SIST", Format(Now, "dd.mm.yyyy HH:mm")
+        If provSendtPaNytt Then KtsSkrivKonfigVerdi "KTS_SENDT_TABELLSIG", "'" & tabellSig
     End If
 
     ' --- Fjern uavklarte cache-oppforinger som IKKE ble sett i denne
@@ -1446,6 +1463,51 @@ Public Function KtsTekstTilDato(ByVal s As String) As Date
     If Len(s) < 10 Then Exit Function
     KtsTekstTilDato = DateSerial(CInt(Mid$(s, 7, 4)), CInt(Mid$(s, 4, 2)), CInt(Left$(s, 2)))
     If Len(s) >= 16 Then KtsTekstTilDato = KtsTekstTilDato + TimeSerial(CInt(Mid$(s, 12, 2)), CInt(Mid$(s, 15, 2)), 0)
+End Function
+
+' Et kort "fingeravtrykk" av e-post- og gjenkjenningskolonnene (radantall +
+' en enkel hash av verdiene). Endres det, er tabellen redigert pa en mate som
+' kan gi nye koblinger for sendte e-poster (0.17.1).
+Private Function KtsTabellSignatur(ByVal tbl As ListObject, epostKolonner() As String, gjenkjenningKolonner() As String) As String
+    If tbl Is Nothing Then Exit Function
+    If tbl.DataBodyRange Is Nothing Then Exit Function
+    Dim h As Double, runde As Long, kolNavn As Variant, kolNr As Long, v As Variant
+    Dim r As Long, i As Long, s As String
+    For runde = 1 To 2
+        Dim liste() As String
+        If runde = 1 Then
+            If ErTom(epostKolonner) Then GoTo NesteRunde
+            liste = epostKolonner
+        Else
+            If ErTom(gjenkjenningKolonner) Then GoTo NesteRunde
+            liste = gjenkjenningKolonner
+        End If
+        For Each kolNavn In liste
+            kolNr = KtsKolonneNr(tbl, CStr(kolNavn))
+            If kolNr > 0 Then
+                v = tbl.ListColumns(kolNr).DataBodyRange.Value
+                If IsArray(v) Then
+                    For r = 1 To UBound(v, 1)
+                        If IsError(v(r, 1)) Then s = "#" Else s = CStr(v(r, 1))
+                        For i = 1 To Len(s)
+                            h = h * 31 + (AscW(Mid$(s, i, 1)) And &HFFFF&)
+                            h = h - Int(h / 2147483647#) * 2147483647#
+                        Next i
+                        h = h * 31 + 7
+                        h = h - Int(h / 2147483647#) * 2147483647#
+                    Next r
+                Else
+                    If Not IsError(v) Then s = CStr(v) Else s = "#"
+                    For i = 1 To Len(s)
+                        h = h * 31 + (AscW(Mid$(s, i, 1)) And &HFFFF&)
+                        h = h - Int(h / 2147483647#) * 2147483647#
+                    Next i
+                End If
+            End If
+        Next kolNavn
+NesteRunde:
+    Next runde
+    KtsTabellSignatur = tbl.DataBodyRange.Rows.Count & ":" & Format(h, "0")
 End Function
 
 ' Den delte postboksens mappe for sendte e-poster (navnet avhenger av spraket).
